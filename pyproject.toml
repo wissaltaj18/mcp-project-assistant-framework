@@ -1,0 +1,4 @@
+dependencies = [
+    "mcp[cli]",
+    "requests",
+]

@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Software Engineering Assistant</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+    :root {
+        --bg: #0b1120;
+        --panel: #111827;
+        --surface: #1a2332;
+        --surface-hover: #212c40;
+        --border: #263041;
+        --border-strong: #334155;
+        --text: #f1f5f9;
+        --text-muted: #8b96a8;
+        --accent: #6366f1;
+        --accent-hover: #4f46e5;
+        --success: #10b981;
+        --success-bg: rgba(16, 185, 129, 0.1);
+        --danger: #ef4444;
+        --danger-bg: rgba(239, 68, 68, 0.1);
+        --amber: #f59e0b;
+        --amber-bg: rgba(245, 158, 11, 0.12);
+        --gray-bg: rgba(148, 163, 184, 0.12);
+    }
+
+    body {
+        background-color: var(--bg);
+        color: var(--text);
+        height: 100vh;
+        display: flex;
+        overflow: hidden;
+    }
+
+    #sidebar {
+        width: 264px;
+        background-color: var(--panel);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 20px 16px;
+        flex-shrink: 0;
+    }
+
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+
+    .brand-icon {
+        width: 34px; height: 34px; border-radius: 9px;
+        background: linear-gradient(135deg, var(--accent), #8b5cf6);
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+    }
+
+    .brand-name { font-size: 14px; font-weight: 600; line-height: 1.3; }
+    .brand-sub { font-size: 11px; color: var(--text-muted); }
+
+    .sidebar-section { margin-bottom: 20px; }
+
+    .sidebar-label {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--text-muted); margin-bottom: 8px; font-weight: 600;
+    }
+
+    .project-card { background-color: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+
+    .project-name { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+
+    .status-dot {
+        width: 6px; height: 6px; border-radius: 50%; background-color: var(--success);
+        flex-shrink: 0; box-shadow: 0 0 6px var(--success);
+    }
+
+    .chip-list { display: flex; flex-wrap: wrap; gap: 4px; }
+
+    .chip { font-size: 11px; padding: 3px 8px; border-radius: 5px; background-color: rgba(99, 102, 241, 0.12); color: #a5b4fc; }
+
+    .sidebar-btn {
+        width: 100%; padding: 10px; background-color: var(--surface);
+        border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text);
+        font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+        transition: background-color 0.15s ease;
+    }
+    .sidebar-btn:hover { background-color: var(--surface-hover); }
+    .sidebar-btn + .sidebar-btn { margin-top: 8px; }
+
+    #new-chat-btn { margin-top: auto; }
+
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    #messages { flex: 1; overflow-y: auto; padding: 32px 24px; }
+
+    #messages-inner { max-width: 760px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+    .message { display: flex; gap: 12px; max-width: 90%; }
+
+    .message.user { align-self: flex-end; flex-direction: row-reverse; }
+
+    .avatar {
+        width: 30px; height: 30px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    .message.assistant .avatar { background: linear-gradient(135deg, var(--accent), #8b5cf6); }
+    .message.user .avatar { background-color: var(--surface); border: 1px solid var(--border-strong); }
+
+    .bubble { padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.65; white-space: pre-wrap; }
+
+    .message.assistant .bubble { background-color: var(--surface); border: 1px solid var(--border); border-top-left-radius: 4px; }
+
+    .message.user .bubble { background-color: var(--accent); border-top-right-radius: 4px; }
+
+    .bubble.typing { display: flex; gap: 4px; align-items: center; padding: 16px; }
+
+    .msg-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+    .trace { display: flex; flex-direction: column; gap: 4px; }
+
+    .trace-step {
+        display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+        background-color: rgba(99, 102, 241, 0.06); border-radius: 7px;
+        border-left: 2px solid var(--accent); font-size: 12px; color: var(--text-muted);
+    }
+
+    .trace-step svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--accent); }
+    .trace-step code { color: #a5b4fc; font-size: 11px; background: none; }
+
+    .diff-block {
+        background-color: #0d1420; border: 1px solid var(--border); border-radius: 10px;
+        overflow: hidden; font-size: 12.5px;
+    }
+
+    .diff-header {
+        padding: 8px 14px; background-color: var(--surface); border-bottom: 1px solid var(--border);
+        color: var(--text-muted); font-size: 11.5px; font-weight: 600;
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+
+    .diff-line { padding: 2px 14px; white-space: pre; font-family: "SF Mono", Consolas, monospace; }
+    .diff-line.removed { background-color: var(--danger-bg); color: #fca5a5; }
+    .diff-line.added { background-color: var(--success-bg); color: #86efac; }
+
+    .plan-card { background-color: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden; }
+
+    .plan-header {
+        padding: 12px 14px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+
+    .plan-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+
+    .status-badge {
+        font-size: 10.5px; font-weight: 600; padding: 3px 9px; border-radius: 20px;
+        text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .status-badge.pending_confirmation { background-color: var(--amber-bg); color: var(--amber); }
+    .status-badge.approved { background-color: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
+    .status-badge.executed { background-color: var(--success-bg); color: #6ee7b7; }
+    .status-badge.failed { background-color: var(--danger-bg); color: #fca5a5; }
+    .status-badge.rejected { background-color: var(--gray-bg); color: var(--text-muted); }
+    .status-badge.invalidated { background-color: var(--danger-bg); color: #fca5a5; }
+    .status-badge.expired { background-color: var(--gray-bg); color: var(--text-muted); }
+
+    .plan-body { padding: 12px 14px; }
+
+    .plan-dup-check {
+        font-size: 12px; color: var(--text-muted); margin-bottom: 10px; padding: 8px 10px;
+        background-color: rgba(255,255,255,0.02); border-radius: 7px; border-left: 2px solid var(--border-strong);
+    }
+
+    .plan-steps { display: flex; flex-direction: column; gap: 6px; }
+
+    .plan-step {
+        display: flex; align-items: flex-start; gap: 9px; padding: 8px 10px;
+        background-color: rgba(255,255,255,0.02); border-radius: 8px; font-size: 12.5px;
+    }
+
+    .plan-step .step-icon { font-size: 15px; line-height: 1; margin-top: 1px; }
+    .plan-step .step-desc { font-weight: 500; }
+    .plan-step .step-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .risk-tag {
+        display: inline-block; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+        background-color: var(--amber-bg); color: var(--amber); text-transform: uppercase;
+        letter-spacing: 0.03em; margin-left: 6px; vertical-align: middle;
+    }
+
+    .plan-footer { padding: 10px 14px; border-top: 1px solid var(--border); }
+
+    .action-buttons { display: flex; gap: 8px; margin-top: 4px; }
+
+    .btn-confirm, .btn-reject {
+        padding: 8px 16px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
+        cursor: pointer; border: none; display: flex; align-items: center; gap: 6px;
+        transition: opacity 0.15s ease, background-color 0.15s ease;
+    }
+
+    .btn-confirm { background-color: var(--success); color: #052e1e; }
+    .btn-confirm:hover { opacity: 0.88; }
+    .btn-reject { background-color: transparent; color: var(--text-muted); border: 1px solid var(--border-strong); }
+    .btn-reject:hover { background-color: var(--surface-hover); color: var(--text); }
+    .btn-confirm:disabled, .btn-reject:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .dot { width: 6px; height: 6px; border-radius: 50%; background-color: var(--text-muted); animation: bounce 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.15s; }
+    .dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce {
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+        30% { transform: translateY(-4px); opacity: 1; }
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    .message { animation: fadeIn 0.2s ease; }
+
+    #input-area { border-top: 1px solid var(--border); padding: 18px 24px 22px; }
+
+    #input-form {
+        max-width: 760px; margin: 0 auto; display: flex; gap: 10px;
+        background-color: var(--surface); border: 1px solid var(--border-strong);
+        border-radius: 14px; padding: 10px 10px 10px 18px; transition: border-color 0.15s ease;
+    }
+
+    #input-form:focus-within { border-color: var(--accent); }
+
+    #message-input {
+        flex: 1; background: none; border: none; outline: none; color: var(--text);
+        font-size: 14px; resize: none; max-height: 140px; padding: 8px 0; font-family: inherit;
+    }
+
+    #message-input::placeholder { color: var(--text-muted); }
+
+    #send-button {
+        background-color: var(--accent); border: none; border-radius: 10px; color: white;
+        width: 38px; height: 38px; cursor: pointer; display: flex; align-items: center;
+        justify-content: center; flex-shrink: 0; transition: background-color 0.15s ease;
+    }
+
+    #send-button:hover { background-color: var(--accent-hover); }
+    #send-button:disabled { background-color: var(--border-strong); cursor: not-allowed; }
+    #send-button svg { width: 16px; height: 16px; }
+
+    .hint { text-align: center; font-size: 11.5px; color: var(--text-muted); margin-top: 10px; }
+
+    #settings-modal {
+        display: none; position: fixed; inset: 0; background: rgba(5, 8, 15, 0.6);
+        align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(2px);
+    }
+
+    #settings-modal .panel {
+        background: var(--panel); border: 1px solid var(--border-strong); border-radius: 14px;
+        padding: 24px; width: 420px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    #settings-modal h3 { font-size: 15px; margin-bottom: 4px; }
+    #settings-modal .modal-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 18px; }
+
+    .field-group { margin-bottom: 14px; }
+
+    .field-label {
+        font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between;
+        align-items: center; margin-bottom: 5px;
+    }
+
+    .field-status { font-size: 10.5px; font-weight: 600; }
+    .field-status.configured { color: var(--success); }
+    .field-status.missing { color: var(--text-muted); }
+
+    #settings-modal input {
+        width: 100%; padding: 9px 11px; background: var(--surface); border: 1px solid var(--border-strong);
+        border-radius: 8px; color: var(--text); font-size: 13px; outline: none;
+        transition: border-color 0.15s ease;
+    }
+    #settings-modal input:focus { border-color: var(--accent); }
+
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+    .btn-secondary {
+        padding: 9px 16px; background: var(--surface); border: 1px solid var(--border-strong);
+        border-radius: 8px; color: var(--text); cursor: pointer; font-size: 12.5px; font-weight: 500;
+    }
+    .btn-secondary:hover { background: var(--surface-hover); }
+
+    .btn-primary {
+        padding: 9px 16px; background: var(--accent); border: none; border-radius: 8px;
+        color: white; cursor: pointer; font-size: 12.5px; font-weight: 600;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="brand">
+        <div class="brand-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>
+        </div>
+        <div>
+            <div class="brand-name">MCP Assistant</div>
+            <div class="brand-sub">Software Engineering</div>
+        </div>
+    </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-label">Projet actif</div>
+        <div class="project-card">
+            <div class="project-name"><span class="status-dot"></span><span id="project-name-text">Chargement...</span></div>
+            <div id="project-resources" class="chip-list"></div>
+        </div>
+    </div>
+
+    <div class="sidebar-section">
+        <div class="sidebar-label">Générateurs disponibles</div>
+        <div id="project-generators" class="chip-list"></div>
+    </div>
+
+    <button id="settings-btn" class="sidebar-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Réglages
+    </button>
+    <button id="new-chat-btn" class="sidebar-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Nouvelle conversation
+    </button>
+</div>
+
+<div id="main">
+    <div id="messages"><div id="messages-inner">
+        <div class="message assistant">
+            <div class="avatar">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.2 4.2l4.2 4.2M15.5 15.5l4.2 4.2M1 12h6M17 12h6M4.2 19.8l4.2-4.2M15.5 8.5l4.2-4.2"/></svg>
+            </div>
+            <div class="msg-body"><div class="bubble">Bonjour ! Je peux consulter les règles du projet, chercher si une fonctionnalité existe déjà, ou proposer un plan de modification pour toi. Que veux-tu faire ?</div></div>
+        </div>
+    </div></div>
+
+    <div id="input-area">
+        <form id="input-form">
+            <textarea id="message-input" rows="1" placeholder="Ex: Ajoute une fonctionnalité de calcul des salaires..."></textarea>
+            <button id="send-button" type="submit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+        </form>
+        <p class="hint">L'agent propose un plan ; seule ton approbation dans l'interface déclenche une action réelle.</p>
+    </div>
+</div>
+
+<div id="settings-modal">
+    <div class="panel">
+        <h3>Réglages — Identifiants</h3>
+        <p class="modal-sub">Configurés une seule fois, stockés localement. Jamais en ligne de commande.</p>
+
+        <div class="field-group">
+            <div class="field-label"><span>Clé API Gemini</span><span id="status-GEMINI_API_KEY" class="field-status missing">non configuré</span></div>
+            <input type="password" id="input-GEMINI_API_KEY" placeholder="Colle ta clé ici">
+        </div>
+        <div class="field-group">
+            <div class="field-label"><span>Clé API Claude (Anthropic)</span><span id="status-ANTHROPIC_API_KEY" class="field-status missing">non configuré</span></div>
+            <input type="password" id="input-ANTHROPIC_API_KEY" placeholder="sk-ant-...">
+        </div>
+        <div class="field-group">
+            <div class="field-label"><span>Token GitHub</span><span id="status-GITHUB_TOKEN" class="field-status missing">non configuré</span></div>
+            <input type="password" id="input-GITHUB_TOKEN" placeholder="ghp_...">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-secondary" id="settings-close">Fermer</button>
+            <button class="btn-primary" id="settings-save">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API = 'http://localhost:8080';
+    const messagesInner = document.getElementById('messages-inner');
+    const messagesDiv = document.getElementById('messages');
+    const form = document.getElementById('input-form');
+    const input = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+
+    const ICONS = {
+        search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>',
+        check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>',
+    };
+
+    const LIBELLES_STATUT = {
+        pending_confirmation: 'En attente', approved: 'Approuvé', executed: 'Exécuté',
+        failed: 'Échec', rejected: 'Rejeté', invalidated: 'Invalidé', expired: 'Expiré',
+    };
+
+    const ICONES_ETAPE = {
+        modify_function: '🔧', modify_file: '📝', create_file: '📄',
+        database_write: '🗄️', git_push: '🌿', create_pull_request: '🔀',
+    };
+
+    const ETAPES_EXTERNES = new Set(['git_push', 'create_pull_request']);
+
+    function chargerInfosProjet() {
+        fetch(`${API}/api/v1/project-info`)
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('project-name-text').textContent = data.project;
+                document.getElementById('project-resources').innerHTML =
+                    data.resources.map(r => `<span class="chip">${r}</span>`).join('') || '<span class="chip">Aucune resource</span>';
+                document.getElementById('project-generators').innerHTML =
+                    data.generators.map(g => `<span class="chip">${g}</span>`).join('');
+            })
+            .catch(() => { document.getElementById('project-name-text').textContent = 'Serveur indisponible'; });
+    }
+    chargerInfosProjet();
+
+    const settingsModal = document.getElementById('settings-modal');
+
+    document.getElementById('settings-btn').addEventListener('click', async () => {
+        settingsModal.style.display = 'flex';
+        try {
+            const etat = await (await fetch(`${API}/api/v1/settings`)).json();
+            for (const cle in etat) {
+                const span = document.getElementById(`status-${cle}`);
+                if (!span) continue;
+                span.textContent = etat[cle] ? 'configuré' : 'non configuré';
+                span.className = `field-status ${etat[cle] ? 'configured' : 'missing'}`;
+            }
+        } catch (e) { /* silencieux */ }
+    });
+
+    document.getElementById('settings-close').addEventListener('click', () => { settingsModal.style.display = 'none'; });
+
+    document.getElementById('settings-save').addEventListener('click', async () => {
+        for (const cle of ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'GITHUB_TOKEN']) {
+            const champ = document.getElementById(`input-${cle}`);
+            const valeur = champ.value.trim();
+            if (valeur) {
+                await fetch(`${API}/api/v1/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: cle, value: valeur }),
+                });
+                champ.value = '';
+            }
+        }
+        settingsModal.style.display = 'none';
+    });
+
+    function rendreDiffSiPresent(texte) {
+        const match = texte.match(/--- AVANT[^\n]*\n([\s\S]*?)\n\n--- APRÈS[^\n]*\n([\s\S]*?)(?:\n\n|$)/);
+        if (!match) return null;
+        const avant = match[1].split('\n').map(l => `<div class="diff-line removed">- ${l.replace(/</g,'&lt;')}</div>`).join('');
+        const apres = match[2].split('\n').map(l => `<div class="diff-line added">+ ${l.replace(/</g,'&lt;')}</div>`).join('');
+        return `<div class="diff-block"><div class="diff-header"><span>Modification proposée</span></div>${avant}${apres}</div>`;
+    }
+
+    function extraireActionId(texte) {
+        const match = texte.match(/id=([a-f0-9]{8})/);
+        return match ? match[1] : null;
+    }
+
+    function extrairePlanId(texte) {
+        const match = texte.match(/plan_id=([a-f0-9]{8})/);
+        return match ? match[1] : null;
+    }
+
+    async function afficherCartePlan(planId, conteneur) {
+        let plan;
+        try {
+            const reponse = await fetch(`${API}/api/v1/plans/${planId}`);
+            plan = await reponse.json();
+        } catch (e) {
+            conteneur.innerHTML = `<div class="bubble">Impossible de charger le plan.</div>`;
+            return;
+        }
+        if (plan.error) {
+            conteneur.innerHTML = `<div class="bubble">Erreur : ${plan.error}</div>`;
+            return;
+        }
+
+        const etapesHtml = plan.steps.map(s => `
+            <div class="plan-step">
+                <span class="step-icon">${ICONES_ETAPE[s.action_type] || '•'}</span>
+                <div>
+                    <div class="step-desc">${s.description}${ETAPES_EXTERNES.has(s.action_type) ? '<span class="risk-tag">Action externe</span>' : ''}</div>
+                    <div class="step-meta">${s.action_type} — ${s.target}</div>
+                </div>
+            </div>
+        `).join('');
+
+        const estEnAttente = plan.status === 'pending_confirmation';
+        const libelle = LIBELLES_STATUT[plan.status] || plan.status;
+
+        conteneur.innerHTML = `
+            <div class="plan-card">
+                <div class="plan-header">
+                    <div class="plan-title">📋 Plan proposé</div>
+                    <span class="status-badge ${plan.status}">${libelle}</span>
+                </div>
+                <div class="plan-body">
+                    <div class="plan-dup-check"><strong>Vérification anti-duplication —</strong> ${plan.duplication_check}</div>
+                    <div class="plan-steps">${etapesHtml}</div>
+                </div>
+                ${estEnAttente ? `
+                <div class="plan-footer">
+                    <div class="action-buttons">
+                        <button class="btn-confirm" onclick="window.__approuverPlan('${planId}', this)">${ICONS.check} Approuver le plan</button>
+                        <button class="btn-reject" onclick="window.__rejeterPlan('${planId}', this)">Rejeter</button>
+                    </div>
+                </div>` : ''}
+            </div>
+        `;
+    }
+
+    window.__approuverPlan = async (planId, btn) => {
+        const zoneBoutons = btn.closest('.action-buttons');
+        zoneBoutons.querySelectorAll('button').forEach(b => b.disabled = true);
+
+        const conteneurMsg = btn.closest('.msg-body');
+        const zoneResultat = document.createElement('div');
+        zoneResultat.className = 'bubble';
+        zoneResultat.textContent = 'Exécution en cours...';
+        conteneurMsg.appendChild(zoneResultat);
+
+        let resultat;
+        try {
+            const reponse = await fetch(`${API}/api/v1/plans/${planId}/approve`, { method: 'POST' });
+            resultat = await reponse.json();
+        } catch (e) {
+            zoneResultat.innerHTML = `<strong>Erreur réseau lors de l'exécution.</strong>`;
+            return;
+        }
+
+        if (resultat.success) {
+            const preuves = resultat.steps_results.map(r => {
+                let ligne = `✅ ${r.action_type}`;
+                if (r.proof) ligne += ` — preuve : ${r.proof}`;
+                if (r.commit_hash) ligne += ` — commit ${r.commit_hash.slice(0, 8)}`;
+                if (r.pull_request_url) ligne += ` — <a href="${r.pull_request_url}" target="_blank" style="color:#a5b4fc;">${r.pull_request_url}</a>`;
+                return ligne;
+            }).join('<br>');
+            zoneResultat.innerHTML = `<strong>✅ Plan exécuté avec succès.</strong><br>${preuves}`;
+            if (resultat.tests_output) {
+                zoneResultat.innerHTML += `<br><br><strong>Résultat des tests :</strong><br><span style="font-size:12px;opacity:0.8;">${resultat.tests_output.slice(0, 400).replace(/</g,'&lt;')}</span>`;
+            }
+        } else {
+            zoneResultat.innerHTML = `<strong>❌ ${resultat.status === 'invalidated' ? 'Plan invalidé' : 'Échec'} :</strong> ${resultat.error || 'Erreur inconnue'}`;
+        }
+
+        const cartePrecedente = btn.closest('.msg-body').querySelector('.plan-card');
+        if (cartePrecedente) afficherCartePlan(planId, cartePrecedente.parentElement);
+    };
+
+    window.__rejeterPlan = async (planId, btn) => {
+        const zoneBoutons = btn.closest('.action-buttons');
+        zoneBoutons.querySelectorAll('button').forEach(b => b.disabled = true);
+
+        await fetch(`${API}/api/v1/plans/${planId}/reject`, { method: 'POST' }).catch(() => {});
+
+        const conteneurMsg = btn.closest('.msg-body');
+        const zoneResultat = document.createElement('div');
+        zoneResultat.className = 'bubble';
+        zoneResultat.textContent = 'Plan rejeté, rien n\'a été exécuté.';
+        conteneurMsg.appendChild(zoneResultat);
+
+        const cartePrecedente = conteneurMsg.querySelector('.plan-card');
+        if (cartePrecedente) afficherCartePlan(planId, cartePrecedente.parentElement);
+    };
+
+    function envoyerMessageProgrammatique(texte) {
+        input.value = texte;
+        form.requestSubmit();
+    }
+
+    function addMessage(text, role, steps) {
+        const wrapper = document.createElement('div');
+        wrapper.className = `message ${role}`;
+
+        let traceHtml = '';
+        let diffHtml = '';
+        if (steps && steps.length > 0) {
+            const lignes = steps.map(step => {
+                if (step.type === 'tool_call') {
+                    return `<div class="trace-step">${ICONS.search}<span>Appel de <code>${step.name}</code></span></div>`;
+                }
+                if (step.type === 'tool_result') {
+                    const resultatTexte = typeof step.result === 'string' ? step.result : JSON.stringify(step.result);
+                    const diff = rendreDiffSiPresent(resultatTexte);
+                    if (diff) diffHtml += diff;
+                    return `<div class="trace-step">${ICONS.check}<span>Résultat de <code>${step.name}</code> reçu</span></div>`;
+                }
+                return '';
+            }).join('');
+            traceHtml = `<div class="trace">${lignes}</div>`;
+        }
+
+        const planId = extrairePlanId(text);
+        const zonePlanId = planId ? `plan-zone-${planId}-${Date.now()}` : null;
+        const zonePlanHtml = planId ? `<div id="${zonePlanId}">Chargement du plan...</div>` : '';
+
+        wrapper.innerHTML = `
+            <div class="avatar">${role === 'user'
+                ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>'
+                : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.2 4.2l4.2 4.2M15.5 15.5l4.2 4.2M1 12h6M17 12h6M4.2 19.8l4.2-4.2M15.5 8.5l4.2-4.2"/></svg>'}</div>
+            <div class="msg-body">
+                ${traceHtml}
+                ${diffHtml}
+                <div class="bubble">${text.replace(/</g, '&lt;')}</div>
+                ${zonePlanHtml}
+            </div>
+        `;
+        messagesInner.appendChild(wrapper);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        if (planId) {
+            const conteneurPlan = wrapper.querySelector(`#${zonePlanId}`);
+            afficherCartePlan(planId, conteneurPlan);
+        }
+
+        return wrapper;
+    }
+
+    function addTypingIndicator() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message assistant';
+        wrapper.id = 'typing-indicator';
+        wrapper.innerHTML = `
+            <div class="avatar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg></div>
+            <div class="bubble typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        `;
+        messagesInner.appendChild(wrapper);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const indicator = document.getElementById('typing-indicator');
+        if (indicator) indicator.remove();
+    }
+
+    input.addEventListener('input', () => {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            form.requestSubmit();
+        }
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const message = input.value.trim();
+        if (!message) return;
+
+        addMessage(message, 'user');
+        input.value = '';
+        input.style.height = 'auto';
+        sendButton.disabled = true;
+        addTypingIndicator();
+
+        try {
+            const response = await fetch(`${API}/api/v1/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+
+            removeTypingIndicator();
+
+            if (response.ok) {
+                const data = await response.json();
+                addMessage(data.reply, 'assistant', data.steps);
+            } else {
+                addMessage(`Erreur serveur (code ${response.status}).`, 'assistant');
+            }
+        } catch (error) {
+            removeTypingIndicator();
+            addMessage("Impossible de contacter l'assistant. Vérifie que chat_server.py est lancé (uvicorn chat_server:app --reload --port 8080).", 'assistant');
+        }
+
+        sendButton.disabled = false;
+        input.focus();
+    });
+
+    document.getElementById('new-chat-btn').addEventListener('click', async () => {
+        await fetch(`${API}/api/v1/reset`, { method: 'POST' }).catch(() => {});
+        messagesInner.innerHTML = `
+            <div class="message assistant">
+                <div class="avatar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg></div>
+                <div class="msg-body"><div class="bubble">Nouvelle conversation démarrée. Que veux-tu faire ?</div></div>
+            </div>`;
+    });
+</script>
+
+</body>
+</html>

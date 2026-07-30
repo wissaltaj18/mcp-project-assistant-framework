@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AegisAI — Dashboard de Gouvernance Budgétaire</title>
+    <!-- Tailwind CSS pour un rendu professionnel rapide et moderne -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <!-- SVG Logo AegisAI -->
+                <div class="w-10 h-10 bg-brand-600/10 border border-brand-500/30 rounded-xl flex items-center justify-center text-brand-500 shadow-lg shadow-brand-500/10">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <span class="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">AegisAI</span>
+                    <span class="text-xs block text-slate-500 font-medium">Gouvernance &amp; Budgets API LLM</span>
+                </div>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-1.5 h-1.5 mr-1.5 bg-emerald-500 rounded-full animate-ping"></span> Live Status
+                </span>
+                <button onclick="fetchStatus()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg border border-slate-700 transition duration-150 ease-in-out flex items-center gap-1">
+                    🔄 Rafraîchir
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Alerts & Feedbacks Zone -->
+        <div id="connection-error" class="hidden mb-6 p-4 bg-red-950/40 border border-red-500/30 rounded-xl flex items-start gap-3">
+            <div class="p-2 bg-red-500/10 rounded-lg text-red-400">
+                ⚠️
+            </div>
+            <div>
+                <h4 class="text-red-400 font-bold">Backend indisponible</h4>
+                <p class="text-red-300/80 text-sm mt-1">
+                    Impossible de contacter l'API sur <code class="bg-red-950/80 px-1.5 py-0.5 rounded text-red-300 font-mono text-xs">http://localhost:8000/api/v1/budget/status</code>.
+                    Veuillez lancer votre serveur FastAPI (<code class="bg-red-950/80 px-1.5 py-0.5 rounded text-red-300 font-mono text-xs">uvicorn main:app --reload</code>) et recharger la page.
+                </p>
+            </div>
+        </div>
+
+        <!-- Simulation Error & Success Notifications -->
+        <div id="simulation-feedback" class="hidden mb-6 p-4 rounded-xl flex items-start gap-3 transition-all duration-300">
+            <!-- Dynamic Content -->
+        </div>
+
+        <!-- Dashboard Layout Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Main Content: Status Matrix & Simulation (2 cols) -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-white tracking-tight">Vue d'ensemble des budgets</h2>
+                        <p class="text-sm text-slate-400">Suivi en temps réel de l'allocation des tokens et coûts associés.</p>
+                    </div>
+                </div>
+
+                <!-- Projects Dynamic Container -->
+                <div id="projects-container" class="grid gap-4">
+                    <!-- Dynamic cards will be injected here -->
+                    <div class="text-center py-12 border border-dashed border-slate-800 rounded-2xl">
+                        <div class="animate-pulse flex flex-col items-center gap-3">
+                            <div class="h-4 bg-slate-800 w-1/3 rounded"></div>
+                            <div class="h-3 bg-slate-800 w-1/2 rounded"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar: Business Rules & Information -->
+            <div class="space-y-6">
+                <!-- Business Rules panel -->
+                <div class="bg-slate-950 border border-slate-800/80 rounded-2xl p-6">
+                    <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span>🛡️</span> Règles Métier Actives
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="p-3.5 bg-slate-900 rounded-xl border border-slate-800/50 flex items-start gap-3">
+                            <div class="w-6 h-6 shrink-0 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 text-sm font-semibold">⚠️</div>
+                            <div>
+                                <h4 class="text-xs font-semibold text-slate-200">Alerte de Dépassement (80%)</h4>
+                                <p class="text-[11px] text-slate-400 mt-1">À partir de 80% de budget consommé, le projet passe en état d'alerte visuelle.</p>
+                            </div>
+                        </div>
+                        <div class="p-3.5 bg-slate-900 rounded-xl border border-slate-800/50 flex items-start gap-3">
+                            <div class="w-6 h-6 shrink-0 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 text-sm font-semibold">🚫</div>
+                            <div>
+                                <h4 class="text-xs font-semibold text-slate-200">Blocage Absolu (100%)</h4>
+                                <p class="text-[11px] text-slate-400 mt-1">À 100% ou plus de consommation, tout nouvel appel API est formellement bloqué par la passerelle.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Logs / Audit trail -->
+                <div class="bg-slate-950 border border-slate-800/80 rounded-2xl p-6 flex flex-col h-[350px]">
+                    <div class="flex items-center justify-between mb-4 shrink-0">
+                        <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                            <span>📜</span> Console de Simulation
+                        </h3>
+                        <button onclick="clearLogs()" class="text-slate-500 hover:text-slate-300 text-xs font-medium transition">Effacer</button>
+                    </div>
+                    <div id="console-logs" class="flex-1 overflow-y-auto font-mono text-[11px] text-slate-400 space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+                        <div class="text-slate-500 italic">En attente de simulation d'appel API...</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 mt-16 py-8 bg-slate-950/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-500 text-xs">
+            <p>AegisAI — Solution de Gouvernance de Coûts LLM. Version Client d'Administration Unifiée.</p>
+        </div>
+    </footer>
+
+    <!-- JS Logic -->
+    <script>
+        const API_STATUS_URL = "http://localhost:8000/api/v1/budget/status";
+        const API_CHECK_URL = "http://localhost:8000/api/v1/budget/check";
+
+        // Logger Helper
+        function logMessage(text, type = "info") {
+            const consoleLogs = document.getElementById("console-logs");
+            
+            // Remove placeholder if present
+            if (consoleLogs.querySelector(".italic")) {
+                consoleLogs.innerHTML = "";
+            }
+
+            const timestamp = new Date().toLocaleTimeString();
+            const logEl = document.createElement("div");
+            logEl.className = `p-1.5 rounded bg-slate-900 border-l-2 ${
+                type === "error" ? "border-red-500 text-red-400" :
+                type === "success" ? "border-emerald-500 text-emerald-400" :
+                "border-brand-500 text-slate-300"
+            }`;
+            logEl.innerHTML = `<span class="text-slate-500">[${timestamp}]</span> ${text}`;
+            consoleLogs.appendChild(logEl);
+            consoleLogs.scrollTop = consoleLogs.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById("console-logs").innerHTML = `<div class="text-slate-500 italic">En attente de simulation d'appel API...</div>`;
+        }
+
+        // Show/Hide Feedbacks
+        function showNotification(message, type = "error") {
+            const fb = document.getElementById("simulation-feedback");
+            fb.className = `mb-6 p-4 rounded-xl flex items-start gap-3 transition-all duration-300 ${
+                type === "error" 
+                ? "bg-red-950/40 border border-red-500/30 text-red-200" 
+                : "bg-emerald-950/40 border border-emerald-500/30 text-emerald-200"
+            }`;
+            
+            fb.innerHTML = `
+                <div class="p-1.5 rounded-lg text-lg ${type === 'error' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}">
+                    ${type === 'error' ? '🚫' : '✅'}
+                </div>
+                <div class="flex-1">
+                    <h4 class="font-bold text-sm ${type === 'error' ? 'text-red-400' : 'text-emerald-400'}">
+                        ${type === 'error' ? 'Simulation bloquée (Règle Métier)' : 'Appel API réussi'}
+                    </h4>
+                    <p class="text-xs mt-1 text-slate-300">${message}</p>
+                </div>
+                <button onclick="document.getElementById('simulation-feedback').classList.add('hidden')" class="text-slate-400 hover:text-white text-xs">&times;</button>
+            `;
+            fb.classList.remove("hidden");
+        }
+
+        // FETCH DATA
+        async function fetchStatus() {
+            const errorBanner = document.getElementById("connection-error");
+            const projectsContainer = document.getElementById("projects-container");
+
+            try {
+                const response = await fetch(API_STATUS_URL, {
+                    method: "GET",
+                    headers: { "Accept": "application/json" }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Erreur API: Code ${response.status}`);
+                }
+
+                const data = await response.json();
+                errorBanner.classList.add("hidden");
+                renderProjects(data);
+
+            } catch (err) {
+                console.error("Fetch failed", err);
+                errorBanner.classList.remove("hidden");
+                projectsContainer.innerHTML = `
+                    <div class="p-8 text-center border border-dashed border-red-500/30 bg-red-950/10 rounded-2xl text-slate-400">
+                        <p class="font-semibold text-slate-300">Impossible d'afficher les budgets</p>
+                        <p class="text-xs text-slate-500 mt-1">Le serveur FastAPI est injoignable.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // RENDER DOM
+        function renderProjects(projectsData) {
+            const container = document.getElementById("projects-container");
+            const keys = Object.keys(projectsData);
+
+            if (keys.length === 0) {
+                container.innerHTML = `
+                    <div class="p-8 text-center border border-dashed border-slate-800 rounded-2xl text-slate-400">
+                        <p>Aucun projet retourné par l'API.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let htmlContent = "";
+
+            keys.forEach(projectId => {
+                const { current_spend, budget_limit } = projectsData[projectId];
+                const ratio = budget_limit > 0 ? (current_spend / budget_limit) : 0;
+                const ratioPercent = Math.round(ratio * 100);
+
+                // Styling determination depending on active business rules
+                let cardBorderColor = "border-slate-800/80";
+                let badgeHTML = "";
+                let progressColorClass = "bg-brand-500 shadow-brand-500/20";
+                let textStatusClass = "text-brand-400";
+
+                if (ratio >= 1.0) {
+                    cardBorderColor = "border-red-500/40 bg-red-950/10";
+                    badgeHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">🔥 BLOQUÉ (&ge;100%)</span>`;
+                    progressColorClass = "bg-red-500 shadow-red-500/20";
+                    textStatusClass = "text-red-400 font-bold";
+                } else if (ratio >= 0.8) {
+                    cardBorderColor = "border-amber-500/40 bg-amber-950/5";
+                    badgeHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">⚠️ ALERTE (&ge;80%)</span>`;
+                    progressColorClass = "bg-amber-500 shadow-amber-500/20";
+                    textStatusClass = "text-amber-400 font-semibold";
+                } else {
+                    badgeHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✅ CONFORME</span>`;
+                    progressColorClass = "bg-emerald-500 shadow-emerald-500/20";
+                    textStatusClass = "text-emerald-400";
+                }
+
+                htmlContent += `
+                    <div class="bg-slate-950 border ${cardBorderColor} rounded-2xl p-6 hover:shadow-xl transition-all duration-200">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                            <div>
+                                <span class="text-xs font-mono text-slate-500 uppercase tracking-wider">Identifiant Projet</span>
+                                <h3 class="text-lg font-bold text-white tracking-tight">${projectId}</h3>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                ${badgeHTML}
+                            </div>
+                        </div>
+
+                        <!-- Progress indicator and Numbers -->
+                        <div class="space-y-2 mb-6">
+                            <div class="flex items-end justify-between text-xs">
+                                <span class="text-slate-400">Consommation : <strong class="${textStatusClass} font-mono">${current_spend.toFixed(2)} $</strong></span>
+                                <span class="text-slate-500">Limite : <strong class="text-slate-300 font-mono">${budget_limit.toFixed(2)} $</strong></span>
+                            </div>
+                            <div class="w-full bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-800">
+                                <div class="h-full rounded-full ${progressColorClass} transition-all duration-500 ease-out" style="width: ${Math.min(ratioPercent, 100)}%"></div>
+                            </div>
+                            <div class="text-right text-[10px] font-mono text-slate-500">
+                                ${ratioPercent}% utilisé
+                            </div>
+                        </div>
+
+                        <!-- Simulation Action Box inside the project card -->
+                        <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            <div class="flex-1">
+                                <label for="cost-${projectId}" class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Coût Estimé ($)</label>
+                                <div class="relative rounded-md shadow-sm">
+                                    <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-500 text-xs font-mono">$</span>
+                                    <input type="number" step="0.5" min="0.01" value="5.00" id="cost-${projectId}" 
+                                        class="block w-full pl-6 pr-2 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white font-mono focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none transition" />
+                                </div>
+                            </div>
+                            <button onclick="simulateApiCall('${projectId}')" id="btn-${projectId}"
+                                class="shrink-0 self-end px-4 py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-md hover:shadow-brand-500/20 transition duration-150 ease-in-out">
+                                Simuler un appel API
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = htmlContent;
+        }
+
+        // SIMULATE WRITE (POST)
+        async function simulateApiCall(projectId) {
+            const costInput = document.getElementById(`cost-${projectId}`);
+            const actionBtn = document.getElementById(`btn-${projectId}`);
+            const feedbackBox = document.getElementById("simulation-feedback");
+            
+            const estimatedCost = parseFloat(costInput.value);
+
+            if (isNaN(estimatedCost) || estimatedCost <= 0) {
+                alert("Veuillez entrer un coût estimé valide et supérieur à 0.");
+                return;
+            }
+
+            // Disable UI during transmission
+            actionBtn.disabled = true;
+            actionBtn.innerText = "Traitement...";
+            logMessage(`Simulation de requête POST lancée pour '${projectId}' (+ ${estimatedCost.toFixed(2)}$)...`, "info");
+
+            try {
+                const response = await fetch(API_CHECK_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify({
+                        project_id: projectId,
+                        estimated_cost: estimatedCost
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.status === 200) {
+                    // Success : Fetch fresh values from /status immediately
+                    logMessage(`Réponse API 200 (Succès) : ${data.message || 'Appel autorisé'}`, "success");
+                    showNotification(`L'appel de ${estimatedCost.toFixed(2)}$ a été autorisé.`, "success");
+                    await fetchStatus();
+                } 
+                else if (response.status === 403) {
+                    // Business Rule Violation: Blocked (No status pull needed but allowed)
+                    const apiErrorMsg = data.detail || "Limite budgétaire dépassée, appel bloqué.";
+                    logMessage(`Réponse API 403 (Bloqué) : ${apiErrorMsg}`, "error");
+                    showNotification(apiErrorMsg, "error");
+                } 
+                else {
+                    // Miscellaneous Server Errors
+                    const fallbackErrorMsg = data.detail || `Serveur a renvoyé un statut ${response.status}`;
+                    logMessage(`Réponse API ${response.status} (Erreur) : ${fallbackErrorMsg}`, "error");
+                    showNotification(fallbackErrorMsg, "error");
+                }
+
+            } catch (err) {
+                console.error("Simulation failed", err);
+                logMessage(`Échec critique du transport : le serveur a refusé la connexion ou n'est plus en ligne.`, "error");
+                showNotification(`Impossible de contacter l'API pour effectuer la simulation. Vérifiez votre backend FastAPI.`, "error");
+            } finally {
+                actionBtn.disabled = false;
+                actionBtn.innerText = "Simuler un appel API";
+            }
+        }
+
+        // INITIAL LOAD
+        window.addEventListener("DOMContentLoaded", () => {
+            fetchStatus();
+            // Optional : Auto refresh every 30 seconds
+            setInterval(fetchStatus, 30000);
+        });
+    </script>
+</body>
+</html>

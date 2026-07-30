@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AegisAI - Navigation</title>
+    <style>
+        /* --- Reset & Variables --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        :root {
+            --bg-navbar: #0f172a; /* Slate 900 */
+            --bg-dropdown: #1e293b; /* Slate 800 */
+            --text-main: #f8fafc; /* Slate 50 */
+            --text-muted: #94a3b8; /* Slate 400 */
+            --color-primary: #007bff; /* Bleu d'action AegisAI */
+            --color-alert: #dc3545; /* Rouge d'alerte AegisAI */
+            --color-hover: #1e293b;
+            --color-border: #334155; /* Slate 700 */
+            --transition-speed: 0.25s;
+        }
+
+        body {
+            background-color: #0b0f19;
+            color: var(--text-main);
+            min-height: 100vh;
+        }
+
+        /* --- Navbar Container --- */
+        .navbar {
+            background-color: var(--bg-navbar);
+            border-bottom: 1px solid var(--color-border);
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        /* --- Logo Section --- */
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: var(--text-main);
+            font-weight: 700;
+            font-size: 1.35rem;
+            letter-spacing: -0.5px;
+        }
+
+        .navbar-brand svg {
+            fill: var(--color-primary);
+            width: 32px;
+            height: 32px;
+        }
+
+        .navbar-brand span {
+            background: linear-gradient(135deg, #ffffff 60%, var(--color-primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* --- Navigation Links --- */
+        .navbar-menu {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            height: 100%;
+        }
+
+        .nav-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.95rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            transition: all var(--transition-speed) ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+            height: 100%;
+            align-items: center;
+            border-bottom: 3px solid transparent;
+            border-radius: 0;
+        }
+
+        .nav-link:hover {
+            color: var(--text-main);
+        }
+
+        .nav-link.active {
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+        }
+
+        /* --- Actions (Right Side) --- */
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        /* Role Selector Dropdown */
+        .role-selector {
+            position: relative;
+        }
+
+        .role-btn {
+            background-color: var(--bg-dropdown);
+            border: 1px solid var(--color-border);
+            color: var(--text-main);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: border-color var(--transition-speed);
+        }
+
+        .role-btn:hover {
+            border-color: var(--color-primary);
+        }
+
+        .role-badge {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--color-primary);
+        }
+
+        /* Alert/Notification Icon */
+        .nav-icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+            position: relative;
+            padding: 0.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color var(--transition-speed), color var(--transition-speed);
+        }
+
+        .nav-icon-btn:hover {
+            background-color: var(--color-hover);
+            color: var(--text-main);
+        }
+
+        /* Red Alert Badge for Costs/Compliance overflows */
+        .alert-badge {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 10px;
+            height: 10px;
+            background-color: var(--color-alert);
+            border-radius: 50%;
+            border: 2px solid var(--bg-navbar);
+        }
+
+        /* User Profile Dropdown */
+        .profile-menu {
+            position: relative;
+        }
+
+        .profile-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.25rem;
+            border-radius: 20px;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--color-primary), #00f2fe);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+            border: 2px solid var(--color-border);
+        }
+
+        /* Dropdown Box Generic Style */
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            background-color: var(--bg-dropdown);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            width: 220px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 1010;
+        }
+
+        .dropdown-menu.show {
+            display: flex;
+            animation: fadeIn 0.15s ease-out;
+        }
+
+        .dropdown-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--color-border);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .dropdown-item {
+            padding: 0.75rem 1rem;
+            color: var(--text-main);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            transition: background-color var(--transition-speed);
+            background: none;
+            border: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .dropdown-item:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .dropdown-item.active {
+            color: var(--color-primary);
+            font-weight: 600;
+        }
+
+        /* --- Mobile Toggle (Hamburger) --- */
+        .mobile-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text-main);
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+
+        /* --- Mobile Responsiveness --- */
+        @media (max-width: 992px) {
+            .navbar-menu {
+                display: none; /* Cache par défaut sur mobile, géré en JS */
+                position: absolute;
+                top: 70px;
+                left: 0;
+                width: 100%;
+                height: auto;
+                background-color: var(--bg-navbar);
+                flex-direction: column;
+                padding: 1rem 0;
+                border-bottom: 1px solid var(--color-border);
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            }
+
+            .navbar-menu.show {
+                display: flex;
+            }
+
+            .nav-link {
+                width: 100%;
+                padding: 1rem 2rem;
+                border-bottom: none;
+                border-left: 3px solid transparent;
+            }
+
+            .nav-link.active {
+                border-left-color: var(--color-primary);
+                background-color: rgba(0, 123, 255, 0.05);
+            }
+
+            .mobile-toggle {
+                display: block;
+            }
+
+            .navbar-actions {
+                gap: 0.75rem;
+            }
+
+            .role-btn span {
+                display: none; /* N'affiche que l'icône/badge sur mobile */
+            }
+        }
+
+        /* Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Dummy Body Content to see how the navbar sits on top */
+        .container {
+            max-width: 1200px;
+            margin: 3rem auto;
+            padding: 0 1.5rem;
+        }
+
+        .card {
+            background-color: var(--bg-dropdown);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .card h1 {
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .card p {
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+
+        .btn-action {
+            background-color: var(--color-primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+
+        .btn-action:hover {
+            filter: brightness(1.1);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR START -->
+    <nav class="navbar">
+        <!-- Logo / Aegis Shield Icon SVG -->
+        <a href="#" class="navbar-brand">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L3 6v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V6l-9-4zm0 6c1.66 0 3 1.34 3 3 0 1.09-.59 2.04-1.46 2.56L15 17H9l1.46-3.44C9.59 13.04 9 12.09 9 11c0-1.66 1.34-3 3-3zm-2 10h4v1.5h-4V18z"/>
+            </svg>
+            <span>AegisAI</span>
+        </a>
+
+        <!-- Hamburger Icon for Mobile Menu -->
+        <button class="mobile-toggle" id="mobile-toggle" aria-label="Ouvrir le menu">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+
+        <!-- Navigation Links (Required items) -->
+        <div class="navbar-menu" id="navbar-menu">
+            <a href="#dashboard" class="nav-link active" onclick="setActiveLink(this)">
+                <!-- SVG Icon Dashboard -->
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="vertical-align: middle;">
+                    <rect x="3" y="3" width="7" height="9" rx="1" />
+                    <rect x="14" y="3" width="7" height="5" rx="1" />
+                    <rect x="14" y="12" width="7" height="9" rx="1" />
+                    <rect x="3" y="16" width="7" height="5" rx="1" />
+                </svg>
+                Dashboard
+            </a>
+            <a href="#budgets" class="nav-link" onclick="setActiveLink(this)">
+                <!-- SVG Icon Budget -->
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="vertical-align: middle;">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                Budgets
+            </a>
+            <a href="#conformite" class="nav-link" onclick="setActiveLink(this)">
+                <!-- SVG Icon Compliance (Shield check) -->
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="vertical-align: middle;">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    <path d="m9 11 2 2 4-4"></path>
+                </svg>
+                Conformité
+            </a>
+        </div>
+
+        <!-- Right Hand Actions (Role selector, Alerts, Profile) -->
+        <div class="navbar-actions">
+            
+            <!-- Target User Roles Selector (Admin, Team Lead, Developer) -->
+            <div class="role-selector">
+                <button class="role-btn" id="role-btn" onclick="toggleDropdown('role-dropdown')">
+                    <span class="role-badge"></span>
+                    <span id="current-role">Admin</span>
+                    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div class="dropdown-menu" id="role-dropdown">
+                    <div class="dropdown-header">Rôle Utilisateur</div>
+                    <button class="dropdown-item active" onclick="changeRole('Admin', this)">Admin</button>
+                    <button class="dropdown-item" onclick="changeRole('Team Lead', this)">Team Lead</button>
+                    <button class="dropdown-item" onclick="changeRole('Developer', this)">Developer</button>
+                </div>
+            </div>
+
+            <!-- Red Alert / Notifications Trigger -->
+            <button class="nav-icon-btn" id="alerts-btn" onclick="toggleDropdown('alerts-dropdown')" aria-label="Notifications d'alertes">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+                <!-- Red Alert Badge representing budget or compliance alerts -->
+                <span class="alert-badge"></span>
+            </button>
+            <div class="dropdown-menu" id="alerts-dropdown">
+                <div class="dropdown-header">Alertes de dépassements</div>
+                <div class="dropdown-item" style="color: var(--color-alert); font-weight: 500;">
+                    ⚠️ Budget GPT-4 dépassé (Équipe Dev)
+                </div>
+                <div class="dropdown-item" style="font-size: 0.8rem; color: var(--text-muted);">
+                    Il y a 10 minutes
+                </div>
+                <hr style="border-color: var(--color-border);">
+                <div class="dropdown-item">
+                    ✅ Certificat de conformité renouvelé
+                </div>
+            </div>
+
+            <!-- Profile Menu -->
+            <div class="profile-menu">
+                <button class="profile-btn" onclick="toggleDropdown('profile-dropdown')" aria-label="Menu profil">
+                    <div class="avatar">A</div>
+                </button>
+                <div class="dropdown-menu" id="profile-dropdown">
+                    <div class="dropdown-header">Mon Compte</div>
+                    <a href="#profil" class="dropdown-item">Paramètres</a>
+                    <a href="#facturation" class="dropdown-item">Facturation</a>
+                    <hr style="border-color: var(--color-border)">
+                    <a href="#logout" class="dropdown-item" style="color: var(--color-alert);">Déconnexion</a>
+                </div>
+            </div>
+
+        </div>
+    </nav>
+    <!-- NAVBAR END -->
+
+    <!-- Dynamic Context Display Area -->
+    <div class="container">
+        <div class="card">
+            <h1 id="view-title">Dashboard AegisAI</h1>
+            <p id="view-desc">Suivi global de la consommation de jetons (tokens) LLM et des budgets alloués par équipe.</p>
+            <button class="btn-action" onclick="alert('Simulation d\'action de gouvernance')">Lancer une analyse de coût</button>
+        </div>
+    </div>
+
+    <!-- Vanilla Javascript Logic -->
+    <script>
+        // Set active navigation links & update mock view context
+        function setActiveLink(clickedElement) {
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            clickedElement.classList.add('active');
+
+            // Close mobile menu on click
+            document.getElementById('navbar-menu').classList.remove('show');
+
+            // Simulate view change
+            const title = document.getElementById('view-title');
+            const desc = document.getElementById('view-desc');
+            const page = clickedElement.getAttribute('href').substring(1);
+
+            if (page === 'dashboard') {
+                title.innerText = "Dashboard AegisAI";
+                desc.innerText = "Suivi global de la consommation de jetons (tokens) LLM et des budgets alloués par équipe.";
+            } else if (page === 'budgets') {
+                title.innerText = "Gestion des Budgets LLM";
+                desc.innerText = "Configurez et validez les enveloppes budgétaires par API (OpenAI, Anthropic, Cohere). En cas de dépassement, des alertes de couleur rouge s'activent.";
+            } else if (page === 'conformite') {
+                title.innerText = "Gouvernance & Conformité";
+                desc.innerText = "Contrôle d'accès des modèles d'IA, détection des fuites de données sensibles (PII) et gestion des clés API d'entreprise.";
+            }
+        }
+
+        // Toggle dropdowns
+        function toggleDropdown(id) {
+            // Close other open dropdowns first
+            document.querySelectorAll('.dropdown-menu').forEach(dropdown => {
+                if (dropdown.id !== id) {
+                    dropdown.classList.remove('show');
+                }
+            });
+            // Toggle requested dropdown
+            document.getElementById(id).classList.toggle('show');
+        }
+
+        // Handle role change simulation
+        function changeRole(role, element) {
+            document.getElementById('current-role').innerText = role;
+            
+            // Highlight active role in selector
+            document.querySelectorAll('#role-dropdown .dropdown-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            element.classList.add('active');
+
+            // Update UI/Console mock visual
+            console.log(`Rôle changé vers : ${role}`);
+            
+            // Close role dropdown
+            document.getElementById('role-dropdown').classList.remove('show');
+        }
+
+        // Mobile menu toggle
+        document.getElementById('mobile-toggle').addEventListener('click', function() {
+            document.getElementById('navbar-menu').classList.toggle('show');
+        });
+
+        // Close dropdowns if clicking outside of components
+        window.addEventListener('click', function(e) {
+            if (!e.target.closest('.role-selector') && 
+                !e.target.closest('#alerts-btn') && 
+                !e.target.closest('.profile-menu') &&
+                !e.target.closest('.mobile-toggle')) {
+                document.querySelectorAll('.dropdown-menu').forEach(dropdown => {
+                    dropdown.classList.remove('show');
+                });
+            }
+        });
+    </script>
+</body>
+</html>
