@@ -92,3 +92,7 @@ class WorkspaceService:
                 donnees = json.loads(chemin_metadata.read_text(encoding="utf-8"))
                 workspaces.append(Workspace.from_dict(donnees))
         return workspaces
+
+    def get_repo_path(self, workspace_id: str) -> str:
+        """Chemin absolu du dépôt cloné pour ce Workspace -- source unique de vérité pour cette convention."""
+        return str(self._chemin_workspace(workspace_id) / "repo")

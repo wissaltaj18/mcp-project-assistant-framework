@@ -22,10 +22,13 @@ from utils.string_utils import extract_code_block
 class ChatTools:
     """Regroupe les actions qu'un agent conversationnel peut décider d'exécuter."""
 
-    def __init__(self, container, project_name: str = "aegisai"):
+    def __init__(self, container, project_name: str = "aegisai", repo_path: "str | None" = None):
         self._c = container
         self._project_name = project_name
-        chemin_projet = f"{container.settings.generated_projects_dir}/{project_name}"
+        if repo_path is not None:
+            chemin_projet = repo_path
+        else:
+            chemin_projet = f"{container.settings.generated_projects_dir}/{project_name}"
         self._code_search = PythonCodeSearchService(chemin_projet)
         self._chemin_projet_complet = chemin_projet
         self._knowledge_base_service = None
