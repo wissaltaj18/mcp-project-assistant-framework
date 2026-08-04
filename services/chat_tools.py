@@ -14,6 +14,8 @@ réelle via PlanExecutorService.
 
 import uuid
 
+from services.workspace_service import WorkspaceAlreadyExistsError
+from services.workspace_indexer_service import WorkspaceIndexerService
 from services.code_search_service import PythonCodeSearchService
 from tools.file_tools import build_project_file_path
 from utils.string_utils import extract_code_block
@@ -22,9 +24,17 @@ from utils.string_utils import extract_code_block
 class ChatTools:
     """Regroupe les actions qu'un agent conversationnel peut décider d'exécuter."""
 
-    def __init__(self, container, project_name: str = "aegisai", repo_path: "str | None" = None):
+    def __init__(
+        self, container, project_name: str = "aegisai", repo_path: "str | None" = None, *,
+        workspace_service, resource_generator, workspace_indexer, embedding_provider_name: str = "gemini",
+    ):
         self._c = container
         self._project_name = project_name
+        self._workspace_service = workspace_service
+        self._resource_generator = resource_generator
+        self._workspace_indexer = workspace_indexer
+        self._embedding_provider_name = embedding_provider_name
+        self._active_workspace_id = None  # None = mode legacy (project_name), sinon = Workspace actif
         if repo_path is not None:
             chemin_projet = repo_path
         else:
@@ -36,29 +46,40 @@ class ChatTools:
         self._database = None
         self._plan_storage = None
         self._audit_logger = None
-
+    def _resoudre_chemin_knowledge_base(self) -> str:
+        """
+        Si un Workspace est actif, utilise EXACTEMENT le même chemin que
+        index_workspace écrit (via WorkspaceService.get_knowledge_base_path)
+        -- corrige l'incohérence découverte cette nuit : ce chemin legacy
+        pointait vers un fichier différent de celui qu'index_workspace
+        remplit réellement. Sans Workspace actif, comportement legacy
+        inchangé (rétrocompatibilité).
+        """
+        if self._active_workspace_id is not None:
+            return self._workspace_service.get_knowledge_base_path(self._active_workspace_id)
+        return f"{self._chemin_projet_complet}/.knowledge_base.json"
     def _get_knowledge_base_service(self):
         if self._knowledge_base_service is None:
-            from llm.gemini_embedding_provider import GeminiEmbeddingProvider
+            from config import credentials_store
+            from llm.embedding_provider_factory import build_embedding_provider
             from infra.simple_vector_store import SimpleJsonVectorStore
             from services.knowledge_base_service import KnowledgeBaseService
-            import os
 
-            embedding_provider = GeminiEmbeddingProvider(api_key=os.getenv("GEMINI_API_KEY", ""))
-            vector_store = SimpleJsonVectorStore(f"{self._chemin_projet_complet}/.knowledge_base.json")
+            embedding_provider = build_embedding_provider(self._embedding_provider_name, credentials_store)
+            vector_store = SimpleJsonVectorStore(self._resoudre_chemin_knowledge_base())
             self._knowledge_base_service = KnowledgeBaseService(embedding_provider, vector_store)
         return self._knowledge_base_service
 
     def _get_incremental_indexing_service(self):
         if self._incremental_indexing_service is None:
-            from llm.gemini_embedding_provider import GeminiEmbeddingProvider
+            from config import credentials_store
+            from llm.embedding_provider_factory import build_embedding_provider
             from infra.simple_vector_store import SimpleJsonVectorStore
             from infra.local_git_provider import LocalGitProvider
             from services.codebase_indexer_service import CodebaseIndexerService
             from services.incremental_indexing_service import IncrementalIndexingService
-            import os
 
-            embedding_provider = GeminiEmbeddingProvider(api_key=os.getenv("GEMINI_API_KEY", ""))
+            embedding_provider = build_embedding_provider(self._embedding_provider_name, credentials_store)
             vector_store = SimpleJsonVectorStore(f"{self._chemin_projet_complet}/.knowledge_base.json")
             indexeur = CodebaseIndexerService(embedding_provider, vector_store)
             self._incremental_indexing_service = IncrementalIndexingService(LocalGitProvider(), indexeur)
@@ -84,6 +105,178 @@ class ChatTools:
 
     # ---------- Lecture / analyse (toujours accessibles au LLM) ----------
 
+    def create_workspace(self, repo_url: str, branch: "str | None" = None, auth_token: "str | None" = None) -> str:
+        """
+        Crée un nouveau Workspace à partir d'un dépôt Git : clone le dépôt
+        et prépare le terrain pour les futures analyses. Ne sélectionne
+        PAS ce Workspace comme actif -- la sélection est un sprint séparé.
+
+        Args:
+            repo_url: URL du dépôt Git à importer
+            branch: Branche spécifique à cloner (optionnel)
+        """
+        try:
+           workspace = self._workspace_service.create_workspace(repo_url, branch, auth_token)
+        except WorkspaceAlreadyExistsError as e:
+            return str(e)
+        if workspace.status.value == "error":
+            return f"Échec de la création du Workspace '{workspace.workspace_id}' : {workspace.error_message}"
+        return (
+            f"Workspace '{workspace.workspace_id}' créé avec succès (statut : {workspace.status.value}). "
+            f"Ce Workspace n'est pas encore actif -- l'utilisateur doit le sélectionner explicitement."
+        )
+
+    def set_active_workspace(self, workspace_id: str) -> str:
+        """
+        Bascule ChatTools sur un Workspace déjà créé : toutes les
+        opérations suivantes (lecture, plans, RAG...) porteront sur ce
+        Workspace. Refuse si le Workspace est introuvable ou en erreur.
+
+        Args:
+            workspace_id: Identifiant du Workspace (renvoyé par create_workspace)
+        """
+        workspace = self._workspace_service.get_workspace(workspace_id)
+        if workspace is None:
+            return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
+        if workspace.status.value == "error":
+            return f"Impossible d'activer '{workspace_id}' : ce Workspace est en erreur ({workspace.error_message})."
+
+        self._chemin_projet_complet = self._workspace_service.get_repo_path(workspace_id)
+        self._code_search = PythonCodeSearchService(self._chemin_projet_complet)
+        self._knowledge_base_service = None
+        self._incremental_indexing_service = None
+        self._database = None
+        self._plan_storage = None
+        self._audit_logger = None
+        self._active_workspace_id = workspace_id
+
+        return f"Workspace '{workspace_id}' activé (statut : {workspace.status.value}). Toutes les actions suivantes porteront sur ce Workspace."
+
+    def generate_resources(self, workspace_id: str) -> str:
+        """
+        Génère les Resources d'un Workspace (technical_architecture.md
+        pour l'instant) depuis son analyse d'architecture. Opère sur le
+        workspace_id donné, indépendamment de tout Workspace actif.
+
+        Args:
+            workspace_id: Identifiant du Workspace concerné
+        """
+        workspace = self._workspace_service.get_workspace(workspace_id)
+        if workspace is None:
+            return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
+        if workspace.status.value == "error":
+            return f"Impossible de générer les Resources de '{workspace_id}' : ce Workspace est en erreur ({workspace.error_message})."
+
+        repo_path = self._workspace_service.get_repo_path(workspace_id)
+        resources_path = self._workspace_service.get_resources_path(workspace_id)
+        resultats = self._resource_generator.generate_all(repo_path, resources_path)
+
+        noms_fichiers = ", ".join(resultats.keys())
+        return f"Resources générées pour '{workspace_id}' : {noms_fichiers} (dans {resources_path})."
+    def update_resource(self, workspace_id: str, resource_name: str, new_content: str) -> str:
+        """
+        Modifie une Resource existante (ou en crée une nouvelle) pour un
+        Workspace donné -- ex: changer une règle de dev, ajouter une
+        nouvelle règle (DDD, etc.), corriger un emplacement de dossier
+        proposé par technical_architecture.md.
+
+        Args:
+            workspace_id: Identifiant du Workspace concerné
+            resource_name: Nom du fichier, ex: development_rules.md
+            new_content: Nouveau contenu complet de la Resource
+        """
+        workspace = self._workspace_service.get_workspace(workspace_id)
+        if workspace is None:
+            return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
+        if workspace.status.value == "error":
+            return f"Impossible de modifier une Resource de '{workspace_id}' : ce Workspace est en erreur ({workspace.error_message})."
+
+        resources_path = self._workspace_service.get_resources_path(workspace_id)
+        self._resource_generator.update_resource(resources_path, resource_name, new_content)
+        return f"Resource '{resource_name}' mise à jour pour le Workspace '{workspace_id}'."
+    def set_preference(self, workspace_id: str, key: str, value: str) -> str:
+        """
+        Définit une préférence de workflow pour un Workspace (ex:
+        run_tests_before_push=false, architecture_style=DDD) --
+        persistée, respectée automatiquement par les tools suivants
+        (ex: PlanExecutorService pour les tests avant push).
+
+        Args:
+            workspace_id: Identifiant du Workspace concerné
+            key: Nom de la préférence, ex: run_tests_before_push
+            value: Valeur de la préférence, ex: false
+        """
+        workspace = self._workspace_service.get_workspace(workspace_id)
+        if workspace is None:
+            return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
+        if workspace.status.value == "error":
+            return f"Impossible de définir une préférence pour '{workspace_id}' : ce Workspace est en erreur ({workspace.error_message})."
+
+        preferences = self._workspace_service.get_preferences(workspace_id)
+        preferences.set(key, value)
+        self._workspace_service.save_preferences(workspace_id, preferences)
+        return f"Préférence '{key}' = '{value}' enregistrée pour le Workspace '{workspace_id}'."
+    def index_workspace(self, workspace_id: str) -> str:
+        """
+        Indexe le code d'un Workspace dans sa base vectorielle. NÉCESSITE
+        un fournisseur d'embeddings configuré (Gemini par défaut).
+
+        Args:
+            workspace_id: Identifiant du Workspace concerné
+        """
+        workspace = self._workspace_service.get_workspace(workspace_id)
+        if workspace is None:
+            return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
+        if workspace.status.value == "error":
+            return f"Impossible d'indexer '{workspace_id}' : ce Workspace est en erreur ({workspace.error_message})."
+
+        repo_path = self._workspace_service.get_repo_path(workspace_id)
+        knowledge_base_path = self._workspace_service.get_knowledge_base_path(workspace_id)
+        return self._workspace_indexer.index(repo_path, knowledge_base_path)
+    def prepare_workspace(self, repo_url: str, branch: "str | None" = None, auth_token: "str | None" = None) -> str:
+        """
+        Orchestre le workflow complet : crée le Workspace, l'active
+        automatiquement, génère ses Resources, l'indexe dans le RAG.
+        Réutilise entièrement create_workspace/set_active_workspace/
+        generate_resources/index_workspace -- aucune logique dupliquée.
+        S'arrête proprement si le clone échoue, sans tenter les étapes
+        suivantes sur un Workspace invalide.
+
+        Args:
+            repo_url: URL du dépôt Git à importer
+            branch: Branche spécifique à cloner (optionnel)
+        """
+        resultat_creation = self.create_workspace(repo_url, branch, auth_token)
+        if "créé avec succès" not in resultat_creation:
+            return f"Préparation interrompue à la création du Workspace : {resultat_creation}"
+
+        workspace = self._workspace_service.get_workspace(self._deriver_slug_pour_verification(repo_url))
+        workspace_id = workspace.workspace_id if workspace else None
+        if workspace_id is None:
+            return f"Préparation interrompue : impossible de retrouver le Workspace après sa création. {resultat_creation}"
+
+        resultat_activation = self.set_active_workspace(workspace_id)
+        if "activé" not in resultat_activation:
+            return f"Préparation interrompue à l'activation : {resultat_activation}"
+
+        resultat_resources = self.generate_resources(workspace_id)
+        resultat_index = self.index_workspace(workspace_id)
+
+        return (
+            f"Workspace '{workspace_id}' entièrement préparé et actif :\n"
+            f"1. Création : OK\n"
+            f"2. Activation : OK\n"
+            f"3. Resources : {resultat_resources}\n"
+            f"4. Indexation : {resultat_index}\n"
+            f"Tous les tools suivants opèrent maintenant sur ce Workspace."
+        )
+
+    def _deriver_slug_pour_verification(self, repo_url: str) -> str:
+        """Même logique de dérivation que WorkspaceService._deriver_slug -- nécessaire pour retrouver l'ID après create_workspace, qui ne renvoie qu'un texte."""
+        import re
+        nom_brut = re.sub(r"\.git$", "", repo_url.rstrip("/").split("/")[-1])
+        slug = nom_brut.lower()
+        return re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
     def import_external_repository(self, repo_url: str) -> str:
         """
         Clone un dépôt Git externe (GitHub, GitLab...) dans le projet
@@ -254,21 +447,21 @@ class ChatTools:
         return self._get_database().get_schema()
 
     def index_project(self) -> str:
-        """Indexe le code du projet dans la Knowledge Base (RAG). NÉCESSITE GEMINI_API_KEY."""
-        import os
-        if not os.getenv("GEMINI_API_KEY"):
+        """Indexe le code du projet dans la Knowledge Base (RAG). NÉCESSITE un fournisseur d'embeddings configuré."""
+        from config import credentials_store
+        if not credentials_store.get("GEMINI_API_KEY"):
             return "La Knowledge Base nécessite GEMINI_API_KEY. Utilise plutôt check_existing_feature ou find_project_file."
         return self._get_incremental_indexing_service().reindex_incremental(self._chemin_projet_complet)
 
     def search_knowledge_base(self, query: str) -> str:
         """
-        Recherche sémantique dans le code du projet. NÉCESSITE GEMINI_API_KEY.
+        Recherche sémantique dans le code du projet. NÉCESSITE un fournisseur d'embeddings configuré.
 
         Args:
             query: La question en langage naturel
         """
-        import os
-        if not os.getenv("GEMINI_API_KEY"):
+        from config import credentials_store
+        if not credentials_store.get("GEMINI_API_KEY"):
             return "La Knowledge Base nécessite GEMINI_API_KEY. Utilise plutôt check_existing_feature."
         return self._get_knowledge_base_service().search(query)
 

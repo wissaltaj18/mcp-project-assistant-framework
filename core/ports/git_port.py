@@ -1,31 +1,25 @@
-"""Port pour interroger l'état Git d'un projet (commit actuel, fichiers changés)."""
+"""Port pour interroger l'état Git d'un projet et cloner un dépôt (avec authentification optionnelle)."""
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 
 class GitPort(ABC):
-    """Contrat pour tout composant capable de lire l'historique Git d'un projet."""
+    """Contrat pour tout composant capable de lire l'historique Git d'un projet ou d'en cloner un."""
 
     @abstractmethod
     def get_current_commit_hash(self, project_root: str) -> "str | None":
-        """Renvoie le hash du commit HEAD actuel, ou None si ce n'est pas un dépôt Git."""
         raise NotImplementedError
 
     @abstractmethod
     def get_changed_files_since(self, project_root: str, old_commit_hash: str) -> List[str]:
-        """Renvoie la liste des fichiers modifiés/ajoutés/supprimés depuis un commit donné."""
         raise NotImplementedError
 
     @abstractmethod
-    def clone_repository(self, repo_url: str, destination_path: str, branch: "str | None" = None) -> "str | None":
+    def clone_repository(self, repo_url: str, destination_path: str, branch: Optional[str] = None, auth_token: Optional[str] = None) -> "str | None":
         """
-        Clone un dépôt distant vers un chemin local. Renvoie None si le
-        clonage a réussi, ou un message d'erreur (str) sinon.
-
-        Args:
-            repo_url: URL du dépôt à cloner (HTTPS ou SSH)
-            destination_path: Chemin local où cloner le dépôt
-            branch: Branche spécifique à cloner, ou None pour la branche par défaut
+        Clone un dépôt distant. Si auth_token est fourni (dépôt privé),
+        il est utilisé UNIQUEMENT pendant le clone -- jamais persisté sur
+        disque, jamais dans un message d'erreur renvoyé.
         """
         raise NotImplementedError

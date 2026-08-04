@@ -20,7 +20,7 @@ class FakeGitPort(GitPort):
     def get_changed_files_since(self, project_root: str, old_commit_hash: str):
         return []
 
-    def clone_repository(self, repo_url: str, destination_path: str, branch=None) -> "str | None":
+    def clone_repository(self, repo_url: str, destination_path: str, branch=None, auth_token=None) -> "str | None":
         self.dernier_appel = {"repo_url": repo_url, "destination_path": destination_path, "branch": branch}
         if self._echec:
             return self._echec

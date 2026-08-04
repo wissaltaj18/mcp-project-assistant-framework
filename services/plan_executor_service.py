@@ -23,6 +23,22 @@ class PlanExecutorService:
     def _get_audit_logger(self):
         return self._tools._get_audit_logger()
 
+    def _tests_sont_requis(self) -> bool:
+        """
+        Lit la préférence 'run_tests_before_push' du Workspace actif, si
+        présente -- comportement par défaut (tests toujours requis)
+        inchangé si aucune préférence n'est définie ou si aucun
+        Workspace n'est actif (rétrocompatibilité totale).
+        """
+        workspace_id = getattr(self._tools, "_active_workspace_id", None)
+        if workspace_id is None:
+            return True
+        preferences = self._tools._workspace_service.get_preferences(workspace_id)
+        valeur = preferences.get("run_tests_before_push")
+        if valeur is None:
+            return True
+        return valeur.lower() not in ("false", "non", "0")
+
     def _chemin_absolu(self, chemin_relatif: str) -> str:
         return safe_join(self._tools._chemin_projet_complet, chemin_relatif)
 
@@ -82,22 +98,26 @@ class PlanExecutorService:
 
         resultats = []
         dernier_resultat_tests = None
+        tests_requis = self._tests_sont_requis()
 
         for step in plan.steps:
             if step.action_type == "git_push":
-                dernier_resultat_tests = self._tools.run_tests()
-                if not self._tests_ont_reussi(dernier_resultat_tests):
-                    plan.status = PlanStatus.FAILED
-                    self._storage.save(plan)
-                    self._get_audit_logger().record("plan_failed", {"plan_id": plan_id, "reason": "tests_failed_before_push"})
-                    return {
-                        "success": False,
-                        "plan_id": plan_id,
-                        "status": "failed",
-                        "steps_results": resultats,
-                        "tests_output": dernier_resultat_tests,
-                        "error": "Les tests ont échoué avant le push -- aucun commit ni push n'a été effectué.",
-                    }
+                if tests_requis:
+                    dernier_resultat_tests = self._tools.run_tests()
+                    if not self._tests_ont_reussi(dernier_resultat_tests):
+                        plan.status = PlanStatus.FAILED
+                        self._storage.save(plan)
+                        self._get_audit_logger().record("plan_failed", {"plan_id": plan_id, "reason": "tests_failed_before_push"})
+                        return {
+                            "success": False,
+                            "plan_id": plan_id,
+                            "status": "failed",
+                            "steps_results": resultats,
+                            "tests_output": dernier_resultat_tests,
+                            "error": "Les tests ont échoué avant le push -- aucun commit ni push n'a été effectué.",
+                        }
+                else:
+                    dernier_resultat_tests = "Tests non exigés pour ce Workspace (préférence utilisateur : run_tests_before_push=false)."
 
             resultat_etape = self._executer_etape(step, project_name)
             step.result = resultat_etape
@@ -120,7 +140,10 @@ class PlanExecutorService:
                 }
 
         if dernier_resultat_tests is None:
-            dernier_resultat_tests = self._tools.run_tests()
+            if tests_requis:
+                dernier_resultat_tests = self._tools.run_tests()
+            else:
+                dernier_resultat_tests = "Tests non exigés pour ce Workspace (préférence utilisateur : run_tests_before_push=false)."
 
         plan.status = PlanStatus.EXECUTED
         self._storage.save(plan)
@@ -232,6 +255,7 @@ class PlanExecutorService:
 
     def _executer_git_push(self, step) -> dict:
         import subprocess
+        import os
         racine = self._tools._chemin_projet_complet
         branch_name = step.target
         commit_message = step.arguments.get("commit_message", f"Modification via plan {step.step_id}")
@@ -272,8 +296,12 @@ class PlanExecutorService:
                                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
         commit_hash_reel = resultat_hash.stdout.strip()
 
+        env_sans_prompt = os.environ.copy()
+        env_sans_prompt["GIT_TERMINAL_PROMPT"] = "0"
+
         resultat_push = subprocess.run(["git", "-C", racine, "push", "-u", "origin", branch_name],
-                                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+                                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+                                        env=env_sans_prompt, stdin=subprocess.DEVNULL)
 
         resultat_verif_remote = subprocess.run(["git", "-C", racine, "ls-remote", "--heads", "origin", branch_name],
                                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)

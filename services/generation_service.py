@@ -40,3 +40,6 @@ class GenerationService:
         resultat = self._llm_provider.generate(prompt_final)
         self._logger.info("Génération terminée")
         return resultat
+    def update_resource(self, resources_dir: str, resource_name: str, new_content: str) -> None:
+        """Permet de modifier une Resource après sa génération initiale (ou d'en créer une nouvelle) -- réutilise le même writer."""
+        self._writer.write(resources_dir, resource_name, new_content)
