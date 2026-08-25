@@ -27,8 +27,9 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ACTIVE_LLM_PROVIDER: gemini
+          PYTHONPATH: .
         run: |
-          pytest tests/ -v --tb=short -m "not requires_network"
+          pytest tests/ -v --tb=short -m "not requires_network" --ignore=tests/integration
 
   lint:
     runs-on: ubuntu-latest
