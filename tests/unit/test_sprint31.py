@@ -211,7 +211,7 @@ class TestPromptJiraWorkflow:
         resultat = prompt_jira_workflow(
             "e-commerce", "KAN-4", jira, None, KBLoaderStub()
         )
-        assert "NE MODIFIE JAMAIS" in resultat or "sans approbation" in resultat.lower()
+        assert "approve_plan" in resultat.lower()
 
     def test_prompt_interdit_done_si_quality_gate_fail(self):
         jira = JiraServiceStub()
