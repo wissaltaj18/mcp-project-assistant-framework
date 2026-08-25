@@ -57,9 +57,10 @@ def test_to_markdown_fragment_liste_les_couches_detectees(tmp_path):
     rapport = ArchitectureAnalyzerService().analyze(str(tmp_path))
     fragment = rapport.to_markdown_fragment()
 
-    assert "Dossiers par couche" in fragment
+    # Sprint 19 : la section s'appelle maintenant "Couches architecturales détectées"
+    assert "Couches architecturales détectées" in fragment
     assert "Controller" in fragment
-    assert "Controller" in fragment.replace("\\", "/")  # tolère \ (Windows) et / (Linux)
+    assert "Controller" in fragment.replace("\\", "/")
 
 
 def test_to_markdown_fragment_honnete_si_aucune_couche_detectee():
@@ -67,7 +68,8 @@ def test_to_markdown_fragment_honnete_si_aucune_couche_detectee():
     rapport = ArchitectureAnalysisReport()
     fragment = rapport.to_markdown_fragment()
 
-    assert "Aucun dossier de couche détecté" in fragment
+    # Sprint 19 : le libellé a changé
+    assert "Aucune couche détectée" in fragment
 
 
 def test_scenario_symfony_realiste_avec_plusieurs_couches(tmp_path):
@@ -81,7 +83,6 @@ def test_scenario_symfony_realiste_avec_plusieurs_couches(tmp_path):
 
     rapport = ArchitectureAnalyzerService().analyze(str(tmp_path))
 
-    # Normalise les separateurs pour comparer independamment de l'OS
     controller_normalise = [c.replace("\\", "/") for c in rapport.layer_folders["controller"]]
     service_normalise = [c.replace("\\", "/") for c in rapport.layer_folders["service"]]
     entity_normalise = [c.replace("\\", "/") for c in rapport.layer_folders["entity"]]

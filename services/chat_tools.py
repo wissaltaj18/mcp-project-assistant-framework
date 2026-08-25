@@ -20,6 +20,7 @@ from services.code_search_service import PythonCodeSearchService
 from tools.file_tools import build_project_file_path
 from utils.string_utils import extract_code_block
 
+from core.entities.workspace import WorkspaceStatus
 
 class ChatTools:
     """Regroupe les actions qu'un agent conversationnel peut décider d'exécuter."""
@@ -35,6 +36,7 @@ class ChatTools:
         self._workspace_indexer = workspace_indexer
         self._embedding_provider_name = embedding_provider_name
         self._active_workspace_id = None  # None = mode legacy (project_name), sinon = Workspace actif
+        self._git_service = None
         if repo_path is not None:
             chemin_projet = repo_path
         else:
@@ -46,18 +48,12 @@ class ChatTools:
         self._database = None
         self._plan_storage = None
         self._audit_logger = None
+
     def _resoudre_chemin_knowledge_base(self) -> str:
-        """
-        Si un Workspace est actif, utilise EXACTEMENT le même chemin que
-        index_workspace écrit (via WorkspaceService.get_knowledge_base_path)
-        -- corrige l'incohérence découverte cette nuit : ce chemin legacy
-        pointait vers un fichier différent de celui qu'index_workspace
-        remplit réellement. Sans Workspace actif, comportement legacy
-        inchangé (rétrocompatibilité).
-        """
         if self._active_workspace_id is not None:
             return self._workspace_service.get_knowledge_base_path(self._active_workspace_id)
         return f"{self._chemin_projet_complet}/.knowledge_base.json"
+
     def _get_knowledge_base_service(self):
         if self._knowledge_base_service is None:
             from config import credentials_store
@@ -103,18 +99,7 @@ class ChatTools:
             self._audit_logger = JsonlAuditLogger(self._chemin_projet_complet)
         return self._audit_logger
 
-    # ---------- Lecture / analyse (toujours accessibles au LLM) ----------
-
     def create_workspace(self, repo_url: str, branch: "str | None" = None, auth_token: "str | None" = None) -> str:
-        """
-        Crée un nouveau Workspace à partir d'un dépôt Git : clone le dépôt
-        et prépare le terrain pour les futures analyses. Ne sélectionne
-        PAS ce Workspace comme actif -- la sélection est un sprint séparé.
-
-        Args:
-            repo_url: URL du dépôt Git à importer
-            branch: Branche spécifique à cloner (optionnel)
-        """
         try:
            workspace = self._workspace_service.create_workspace(repo_url, branch, auth_token)
         except WorkspaceAlreadyExistsError as e:
@@ -127,14 +112,6 @@ class ChatTools:
         )
 
     def set_active_workspace(self, workspace_id: str) -> str:
-        """
-        Bascule ChatTools sur un Workspace déjà créé : toutes les
-        opérations suivantes (lecture, plans, RAG...) porteront sur ce
-        Workspace. Refuse si le Workspace est introuvable ou en erreur.
-
-        Args:
-            workspace_id: Identifiant du Workspace (renvoyé par create_workspace)
-        """
         workspace = self._workspace_service.get_workspace(workspace_id)
         if workspace is None:
             return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
@@ -149,18 +126,12 @@ class ChatTools:
         self._plan_storage = None
         self._audit_logger = None
         self._active_workspace_id = workspace_id
+        from services.git_service import GitService
+        self._git_service = GitService(self._chemin_projet_complet)
 
         return f"Workspace '{workspace_id}' activé (statut : {workspace.status.value}). Toutes les actions suivantes porteront sur ce Workspace."
 
     def generate_resources(self, workspace_id: str) -> str:
-        """
-        Génère les Resources d'un Workspace (technical_architecture.md
-        pour l'instant) depuis son analyse d'architecture. Opère sur le
-        workspace_id donné, indépendamment de tout Workspace actif.
-
-        Args:
-            workspace_id: Identifiant du Workspace concerné
-        """
         workspace = self._workspace_service.get_workspace(workspace_id)
         if workspace is None:
             return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
@@ -171,20 +142,15 @@ class ChatTools:
         resources_path = self._workspace_service.get_resources_path(workspace_id)
         resultats = self._resource_generator.generate_all(repo_path, resources_path)
 
+        # Sprint 26 : passer le statut a READY apres generation reussie
+        if workspace.status.value == "analyzing":
+            workspace.status = WorkspaceStatus.READY
+            self._workspace_service.save_preferences(workspace_id, self._workspace_service.get_preferences(workspace_id))
+
         noms_fichiers = ", ".join(resultats.keys())
         return f"Resources générées pour '{workspace_id}' : {noms_fichiers} (dans {resources_path})."
-    def update_resource(self, workspace_id: str, resource_name: str, new_content: str) -> str:
-        """
-        Modifie une Resource existante (ou en crée une nouvelle) pour un
-        Workspace donné -- ex: changer une règle de dev, ajouter une
-        nouvelle règle (DDD, etc.), corriger un emplacement de dossier
-        proposé par technical_architecture.md.
 
-        Args:
-            workspace_id: Identifiant du Workspace concerné
-            resource_name: Nom du fichier, ex: development_rules.md
-            new_content: Nouveau contenu complet de la Resource
-        """
+    def update_resource(self, workspace_id: str, resource_name: str, new_content: str) -> str:
         workspace = self._workspace_service.get_workspace(workspace_id)
         if workspace is None:
             return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
@@ -194,18 +160,8 @@ class ChatTools:
         resources_path = self._workspace_service.get_resources_path(workspace_id)
         self._resource_generator.update_resource(resources_path, resource_name, new_content)
         return f"Resource '{resource_name}' mise à jour pour le Workspace '{workspace_id}'."
-    def set_preference(self, workspace_id: str, key: str, value: str) -> str:
-        """
-        Définit une préférence de workflow pour un Workspace (ex:
-        run_tests_before_push=false, architecture_style=DDD) --
-        persistée, respectée automatiquement par les tools suivants
-        (ex: PlanExecutorService pour les tests avant push).
 
-        Args:
-            workspace_id: Identifiant du Workspace concerné
-            key: Nom de la préférence, ex: run_tests_before_push
-            value: Valeur de la préférence, ex: false
-        """
+    def set_preference(self, workspace_id: str, key: str, value: str) -> str:
         workspace = self._workspace_service.get_workspace(workspace_id)
         if workspace is None:
             return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
@@ -216,14 +172,8 @@ class ChatTools:
         preferences.set(key, value)
         self._workspace_service.save_preferences(workspace_id, preferences)
         return f"Préférence '{key}' = '{value}' enregistrée pour le Workspace '{workspace_id}'."
-    def index_workspace(self, workspace_id: str) -> str:
-        """
-        Indexe le code d'un Workspace dans sa base vectorielle. NÉCESSITE
-        un fournisseur d'embeddings configuré (Gemini par défaut).
 
-        Args:
-            workspace_id: Identifiant du Workspace concerné
-        """
+    def index_workspace(self, workspace_id: str) -> str:
         workspace = self._workspace_service.get_workspace(workspace_id)
         if workspace is None:
             return f"Workspace '{workspace_id}' introuvable. Utilise create_workspace pour en créer un."
@@ -233,19 +183,8 @@ class ChatTools:
         repo_path = self._workspace_service.get_repo_path(workspace_id)
         knowledge_base_path = self._workspace_service.get_knowledge_base_path(workspace_id)
         return self._workspace_indexer.index(repo_path, knowledge_base_path)
-    def prepare_workspace(self, repo_url: str, branch: "str | None" = None, auth_token: "str | None" = None) -> str:
-        """
-        Orchestre le workflow complet : crée le Workspace, l'active
-        automatiquement, génère ses Resources, l'indexe dans le RAG.
-        Réutilise entièrement create_workspace/set_active_workspace/
-        generate_resources/index_workspace -- aucune logique dupliquée.
-        S'arrête proprement si le clone échoue, sans tenter les étapes
-        suivantes sur un Workspace invalide.
 
-        Args:
-            repo_url: URL du dépôt Git à importer
-            branch: Branche spécifique à cloner (optionnel)
-        """
+    def prepare_workspace(self, repo_url: str, branch: "str | None" = None, auth_token: "str | None" = None) -> str:
         resultat_creation = self.create_workspace(repo_url, branch, auth_token)
         if "créé avec succès" not in resultat_creation:
             return f"Préparation interrompue à la création du Workspace : {resultat_creation}"
@@ -272,19 +211,12 @@ class ChatTools:
         )
 
     def _deriver_slug_pour_verification(self, repo_url: str) -> str:
-        """Même logique de dérivation que WorkspaceService._deriver_slug -- nécessaire pour retrouver l'ID après create_workspace, qui ne renvoie qu'un texte."""
         import re
         nom_brut = re.sub(r"\.git$", "", repo_url.rstrip("/").split("/")[-1])
         slug = nom_brut.lower()
         return re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
-    def import_external_repository(self, repo_url: str) -> str:
-        """
-        Clone un dépôt Git externe (GitHub, GitLab...) dans le projet
-        actif, sous "external/". N'écrit dans AUCUN fichier existant.
 
-        Args:
-            repo_url: URL du dépôt à cloner
-        """
+    def import_external_repository(self, repo_url: str) -> str:
         import subprocess
         import re
 
@@ -309,17 +241,6 @@ class ChatTools:
         )
 
     def test_function(self, file_path: str, function_name: str, arguments: dict) -> str:
-        """
-        Exécute RÉELLEMENT une fonction avec des paramètres donnés.
-        Fonctionne pour Python, PHP et JS autonomes (sans dépendances
-        injectées complexes -- les méthodes de service Symfony/Spring
-        avec injection ne peuvent pas être testées isolément).
-
-        Args:
-            file_path: Chemin relatif du fichier contenant la fonction
-            function_name: Nom exact de la fonction à tester
-            arguments: Arguments à passer à la fonction
-        """
         chemin_absolu = build_project_file_path(
             self._c.settings.generated_projects_dir, self._project_name, file_path
         )
@@ -358,11 +279,7 @@ class ChatTools:
         try:
             resultat = subprocess.run(["php", "-r", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
         except FileNotFoundError:
-            return (
-                "PHP n'est pas installé/accessible sur cette machine. Note : les "
-                "méthodes de classes Symfony avec dépendances injectées ne peuvent "
-                "de toute façon pas être testées isolément sans faire tourner toute l'application."
-            )
+            return "PHP n'est pas installé/accessible sur cette machine."
         except subprocess.TimeoutExpired:
             return "Timeout lors de l'exécution PHP."
         if resultat.returncode != 0:
@@ -384,18 +301,17 @@ class ChatTools:
         return f"Résultat de {function_name}({arguments}) : {resultat.stdout.strip()}"
 
     def read_file(self, file_path: str) -> str:
-        """
-        Lit le contenu RÉEL d'un fichier, sans le modifier.
-
-        Args:
-            file_path: Chemin relatif exact du fichier
-        """
-        chemin_absolu = build_project_file_path(
-            self._c.settings.generated_projects_dir, self._project_name, file_path
-        )
-        if not self._c.file_system.file_exists(chemin_absolu):
-            return f"Fichier '{file_path}' introuvable."
-        contenu = self._c.file_system.read_file(chemin_absolu)
+        """Lit le contenu RÉEL d'un fichier du Workspace actif, sans le modifier."""
+        from pathlib import Path
+        # Sprint 26 : pointer vers le repo du Workspace actif, pas generated_projects
+        file_path_norm = file_path.replace("\\", "/")
+        chemin_absolu = Path(self._chemin_projet_complet) / file_path_norm
+        if not chemin_absolu.exists():
+            return f"Fichier '{file_path}' introuvable dans le Workspace actif."
+        try:
+            contenu = chemin_absolu.read_text(encoding="utf-8", errors="ignore")
+        except OSError as e:
+            return f"Erreur lecture : {e}"
         if len(contenu) > 4000:
             return contenu[:4000] + "\n... (fichier tronqué)"
         return contenu
@@ -423,19 +339,10 @@ class ChatTools:
             resultats.append(f"--- PHPUnit ---\n{r.stdout[-1000:]}\n{r.stderr[-500:]}")
 
         if not resultats:
-            return (
-                "Aucun test détecté automatiquement (ni pytest, ni PHPUnit via "
-                "vendor/bin/phpunit -- pour PHP, lance 'composer install' d'abord)."
-            )
+            return "Aucun test détecté automatiquement."
         return "\n\n".join(resultats)
 
     def query_database(self, query: str) -> str:
-        """
-        Exécute une requête de LECTURE (SELECT) sur la base de données du projet.
-
-        Args:
-            query: Requête SQL SELECT uniquement
-        """
         try:
             resultats = self._get_database().execute_query(query)
             return str(resultats) if resultats else "Aucun résultat."
@@ -443,34 +350,21 @@ class ChatTools:
             return f"Erreur : {e}"
 
     def get_database_schema(self) -> str:
-        """Renvoie les tables et colonnes réellement présentes dans la base de données du projet."""
         return self._get_database().get_schema()
 
     def index_project(self) -> str:
-        """Indexe le code du projet dans la Knowledge Base (RAG). NÉCESSITE un fournisseur d'embeddings configuré."""
         from config import credentials_store
         if not credentials_store.get("GEMINI_API_KEY"):
-            return "La Knowledge Base nécessite GEMINI_API_KEY. Utilise plutôt check_existing_feature ou find_project_file."
+            return "La Knowledge Base nécessite GEMINI_API_KEY."
         return self._get_incremental_indexing_service().reindex_incremental(self._chemin_projet_complet)
 
     def search_knowledge_base(self, query: str) -> str:
-        """
-        Recherche sémantique dans le code du projet. NÉCESSITE un fournisseur d'embeddings configuré.
-
-        Args:
-            query: La question en langage naturel
-        """
         from config import credentials_store
         if not credentials_store.get("GEMINI_API_KEY"):
-            return "La Knowledge Base nécessite GEMINI_API_KEY. Utilise plutôt check_existing_feature."
+            return "La Knowledge Base nécessite GEMINI_API_KEY."
         return self._get_knowledge_base_service().search(query)
 
     def list_resources(self) -> str:
-        """
-        Liste les fichiers de règles et de contexte (Resources) disponibles
-        -- celles propres au projet actif, PLUS celles partagées entre
-        tous les projets (dossier _shared).
-        """
         disponibles = self._c.resource_service.list_project_resources(self._project_name)
         partagees = self._lister_resources_partagees()
         toutes = [f"{r} (projet)" for r in disponibles] + [f"{r} (partagée)" for r in partagees]
@@ -484,13 +378,14 @@ class ChatTools:
         return [f.name for f in dossier_partage.glob("*.md")]
 
     def read_resource(self, resource_name: str) -> str:
-        """
-        Lit le contenu d'une Resource -- cherche d'abord dans le projet
-        actif, puis dans les Resources partagées entre projets (_shared).
-
-        Args:
-            resource_name: Nom exact du fichier, ex: business_rules.md
-        """
+        """Lit une Resource du Workspace actif."""
+        # Sprint 26 : chercher d'abord dans le dossier resources du Workspace actif
+        if self._active_workspace_id is not None:
+            from pathlib import Path
+            resources_path = Path(self._workspace_service.get_resources_path(self._active_workspace_id))
+            chemin = resources_path / resource_name
+            if chemin.exists():
+                return chemin.read_text(encoding="utf-8", errors="ignore")
         try:
             resource = self._c.resource_service.load_resource(self._project_name, resource_name)
             return resource.content
@@ -498,7 +393,7 @@ class ChatTools:
             contenu_partage = self._lire_resource_partagee(resource_name)
             if contenu_partage is not None:
                 return contenu_partage
-            return f"Erreur : Resource '{resource_name}' introuvable, ni dans le projet ni dans les Resources partagées."
+            return f"Erreur : Resource '{resource_name}' introuvable."
 
     def _lire_resource_partagee(self, resource_name: str) -> "str | None":
         from pathlib import Path
@@ -508,20 +403,24 @@ class ChatTools:
         return None
 
     def list_available_generators(self) -> str:
-        """Liste les générateurs de pages internes historiques (informationnel)."""
         return ", ".join(self._c.prompt_service.list_available_prompts())
 
     def get_project_structure(self) -> str:
-        """Renvoie l'arborescence réelle des fichiers de code du projet actif, tous langages confondus."""
+        """Renvoie l'arborescence réelle des fichiers du Workspace actif."""
+        from pathlib import Path
+        if self._active_workspace_id is not None:
+            racine = Path(self._chemin_projet_complet)
+            if racine.exists():
+                lignes = []
+                for f in sorted(racine.rglob("*")):
+                    if any(p in {".git", "vendor", "node_modules", "__pycache__"} for p in f.parts):
+                        continue
+                    rel = str(f.relative_to(racine)).replace("\\", "/")
+                    lignes.append(rel)
+                return "\n".join(lignes[:500]) if lignes else "Dossier vide."
         return self._code_search.get_project_structure()
 
     def check_existing_feature(self, feature_name_hint: str) -> str:
-        """
-        Vérifie si une fonctionnalité liée existe DÉJÀ, avant d'en proposer une nouvelle.
-
-        Args:
-            feature_name_hint: Un nom probable de fonction
-        """
         exactes = self._code_search.find_function(feature_name_hint)
         if exactes:
             return f"EXISTE DÉJÀ (nom exact) : {exactes[0].describe()}. Docstring : {exactes[0].docstring}"
@@ -532,28 +431,20 @@ class ChatTools:
         return "Aucune fonctionnalité existante trouvée pour ce nom."
 
     def find_project_file(self, file_name_hint: str) -> str:
-        """
-        Cherche un fichier du projet par son nom, quel que soit son type.
-
-        Args:
-            file_name_hint: Nom exact ou partiel du fichier
-        """
+        """Cherche un fichier du Workspace actif par son nom."""
         from pathlib import Path
-        racine = f"{self._c.settings.generated_projects_dir}/{self._project_name}"
-        chemin_racine = Path(racine)
+        chemin_racine = Path(self._chemin_projet_complet)
         if not chemin_racine.exists():
-            return "Projet introuvable."
-        indice = file_name_hint.lower().replace(".html", "").replace(".css", "").replace(".js", "")
+            return "Workspace actif introuvable."
+        indice = file_name_hint.lower()
         trouves = [
-            str(f.relative_to(chemin_racine))
+            str(f.relative_to(chemin_racine)).replace("\\", "/")
             for f in chemin_racine.rglob("*")
             if f.is_file() and indice in f.name.lower()
         ]
         if not trouves:
             return f"Aucun fichier correspondant à '{file_name_hint}' trouvé."
-        return "Fichiers trouvés : " + ", ".join(trouves)
-
-    # ---------- Calculs internes pour create_plan (jamais appelés directement par le LLM) ----------
+        return "Fichiers trouvés : " + ", ".join(trouves[:20])
 
     def _calculer_modification_fonction(self, function_name: str) -> "dict | None":
         localisation = self._code_search.get_function_source(function_name)
@@ -572,27 +463,20 @@ class ChatTools:
             f"Modifie-la ainsi : {modification_instruction}\n\nRègles métier :\n{regles}\n\n"
             "IMPORTANT : renvoie UNIQUEMENT le code de la fonction modifiée, en Markdown python."
         )
-        return extract_code_block(self._c.llm_provider.generate(prompt))
+        return extract_code_block(self._c.generation_service._llm_provider.generate(prompt))
 
     def _resoudre_chemin_reel(self, chemin_ou_nom: str) -> "str | None":
-        """
-        Si le chemin donné existe tel quel, le renvoie directement. Sinon,
-        cherche un fichier du même NOM n'importe où dans le projet -- rend
-        le système tolérant si le LLM donne juste 'Cart.php' au lieu du
-        chemin complet 'external/E-commerce/src/Entity/Cart.php'.
-        """
-        chemin_absolu = build_project_file_path(
-            self._c.settings.generated_projects_dir, self._project_name, chemin_ou_nom
-        )
-        if self._c.file_system.file_exists(chemin_absolu):
-            return chemin_ou_nom
-
         from pathlib import Path
-        racine = Path(f"{self._c.settings.generated_projects_dir}/{self._project_name}")
+        # Sprint 26 : chercher dans le repo du Workspace actif
+        racine = Path(self._chemin_projet_complet)
+        chemin_direct = racine / chemin_ou_nom.replace("\\", "/")
+        if chemin_direct.exists():
+            return chemin_ou_nom.replace("\\", "/")
+
         nom_fichier = Path(chemin_ou_nom).name
         correspondances = list(racine.rglob(nom_fichier))
         if len(correspondances) == 1:
-            return str(correspondances[0].relative_to(racine))
+            return str(correspondances[0].relative_to(racine)).replace("\\", "/")
         return None
 
     def _generer_nouveau_contenu_fichier(self, file_path: str, modification_instruction: str) -> "dict | None":
@@ -601,12 +485,17 @@ class ChatTools:
             return None
         file_path = chemin_resolu
 
-        chemin_absolu = build_project_file_path(self._c.settings.generated_projects_dir, self._project_name, file_path)
-        contenu_original = self._c.file_system.read_file(chemin_absolu)
+        from pathlib import Path
+        chemin_absolu = Path(self._chemin_projet_complet) / file_path
+        try:
+            contenu_original = chemin_absolu.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return None
 
         extension_vers_langage = {
             ".php": "PHP", ".js": "JavaScript", ".ts": "TypeScript", ".java": "Java",
-            ".cs": "C#", ".go": "Go", ".rb": "Ruby", ".html": "HTML", ".css": "CSS", ".py": "Python",
+            ".cs": "C#", ".go": "Go", ".rb": "Ruby", ".html": "HTML", ".css": "CSS",
+            ".py": "Python", ".twig": "Twig",
         }
         extension = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ""
         langage = extension_vers_langage.get(extension, "le même langage que l'original")
@@ -619,15 +508,24 @@ class ChatTools:
         prompt = (
             f"Voici un fichier {langage} existant ({file_path}) :\n\n```\n{contenu_original}\n```\n\n"
             f"Modifie-le ainsi : {modification_instruction}\n\nConventions :\n{guidelines}\n\n"
-            f"IMPORTANT : le fichier reste en {langage}. Renvoie le fichier COMPLET modifié, un seul bloc Markdown."
+            f"RÈGLES STRICTES :\n"
+            f"1. Modifie UNIQUEMENT ce qui est demandé — rien d'autre.\n"
+            f"2. Ne reformate PAS le code, ne change PAS les classes CSS non mentionnées.\n"
+            f"3. Ne réorganise PAS la structure HTML.\n"
+            f"4. Renvoie le fichier COMPLET en {langage}, un seul bloc Markdown.\n"
+            f"5. Si tu changes une classe CSS, change UNIQUEMENT cette classe, rien autour."
         )
-        nouveau_contenu = extract_code_block(self._c.llm_provider.generate(prompt))
-        return {"file_path": file_path, "original_content": contenu_original, "new_content": nouveau_contenu, "language": langage}
+        nouveau_contenu = extract_code_block(self._c.generation_service._llm_provider.generate(prompt))
+        return {
+            "file_path": file_path,
+            "new_content": nouveau_contenu,
+            "old_content": contenu_original,
+        }
 
     def _generer_nouveau_fichier(self, file_path: str, description: str) -> str:
         extension_vers_langage = {
             ".php": "PHP", ".js": "JavaScript", ".ts": "TypeScript", ".java": "Java",
-            ".cs": "C#", ".go": "Go", ".rb": "Ruby", ".py": "Python",
+            ".cs": "C#", ".go": "Go", ".rb": "Ruby", ".py": "Python", ".twig": "Twig",
         }
         extension = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ""
         langage = extension_vers_langage.get(extension, "le langage approprié")
@@ -640,48 +538,26 @@ class ChatTools:
             f"Ce que ce fichier doit faire : {description}\n\nRègles métier :\n{regles}\n\n"
             f"Renvoie UNIQUEMENT le code dans un seul bloc Markdown."
         )
-        return extract_code_block(self._c.llm_provider.generate(prompt))
+        return extract_code_block(self._c.generation_service._llm_provider.generate(prompt))
 
     def _calculer_hash_projet(self, chemins_fichiers: list) -> dict:
-        """Empreinte SHA-256 de chaque fichier référencé -- détecte un changement entre création et exécution du plan."""
         import hashlib
+        from pathlib import Path
         empreintes = {}
         for chemin_relatif in chemins_fichiers:
-            chemin_absolu = build_project_file_path(self._c.settings.generated_projects_dir, self._project_name, chemin_relatif)
-            if self._c.file_system.file_exists(chemin_absolu):
-                contenu = self._c.file_system.read_file(chemin_absolu)
+            chemin_absolu = Path(self._chemin_projet_complet) / chemin_relatif.replace("\\", "/")
+            if chemin_absolu.exists():
+                contenu = chemin_absolu.read_text(encoding="utf-8", errors="ignore")
                 empreintes[chemin_relatif] = hashlib.sha256(contenu.encode("utf-8")).hexdigest()
             else:
                 empreintes[chemin_relatif] = "ABSENT"
         return empreintes
 
-    # ---------- La SEULE capacité d'écriture du LLM : proposer un plan ----------
-
     def create_plan(self, user_request: str, resources_consulted: list, duplication_check: str, steps: list) -> str:
-        """
-        Crée un VRAI plan d'exécution, avec le contenu exact déjà calculé
-        pour chaque étape -- ne l'exécute PAS. Seul un utilisateur, via un
-        bouton dans l'interface (jamais toi), peut approuver et déclencher
-        l'exécution réelle.
-
-        IMPORTANT : lis TOUJOURS les vrais fichiers (get_project_structure,
-        read_file, check_existing_feature) AVANT d'appeler create_plan.
-        N'invente JAMAIS un fichier, un langage, ou un contenu qui ne
-        correspond pas à ce que tu as réellement lu.
-
-        Args:
-            user_request: Résumé de la demande originale
-            resources_consulted: Noms des Resources lues avant ce plan
-            duplication_check: Résultat exact de check_existing_feature
-            steps: Liste d'étapes, chacune avec "action_type"
-                ("modify_function", "modify_file", "create_file",
-                "database_write", "git_push", "create_pull_request"),
-                "target", "description", "instruction" (fichiers), et
-                "arguments" (pour database_write/git_push/create_pull_request)
-        """
         import uuid as _uuid
         from datetime import datetime, timezone
         from core.entities.execution_plan import ExecutionPlan, PlanStep
+        from pathlib import Path
 
         plan_id = str(_uuid.uuid4())[:8]
         etapes_construites = []
@@ -697,7 +573,7 @@ class ChatTools:
             if action_type == "modify_function":
                 info = self._calculer_modification_fonction(target)
                 if info is None:
-                    return f"Impossible de créer le plan : fonction '{target}' introuvable. Vérifie le vrai nom avec check_existing_feature d'abord."
+                    return f"Impossible de créer le plan : fonction '{target}' introuvable."
                 nouveau_code = self._generer_nouveau_contenu_fonction(info["original_code"], instruction)
                 etapes_construites.append(PlanStep(
                     step_id=f"{plan_id}-{i}", action_type=action_type, target=target, description=description,
@@ -709,24 +585,15 @@ class ChatTools:
             elif action_type == "modify_file":
                 info = self._generer_nouveau_contenu_fichier(target, instruction)
                 if info is None:
-                    return f"Impossible de créer le plan : fichier '{target}' introuvable. Vérifie le vrai chemin avec find_project_file d'abord."
+                    return f"Impossible de créer le plan : fichier '{target}' introuvable."
                 etapes_construites.append(PlanStep(
                     step_id=f"{plan_id}-{i}", action_type=action_type, target=target, description=description,
-                    arguments=info,
+                    arguments={**info, "modification_instruction": instruction},  # ← ajoute ca
                 ))
                 chemins_a_verifier.append(target)
                 fichiers_concernes_par_ce_plan.append(target)
 
             elif action_type == "create_file":
-                extension_cible = "." + target.rsplit(".", 1)[-1] if "." in target else ""
-                structure_reelle = self._code_search.get_project_structure()
-                if extension_cible and extension_cible not in structure_reelle and structure_reelle.strip():
-                    return (
-                        f"Impossible de créer le plan : le fichier '{target}' est en "
-                        f"'{extension_cible}', mais AUCUN fichier de ce type n'existe dans le "
-                        f"projet réel (structure actuelle : {structure_reelle[:200]}...). "
-                        f"Vérifie que tu lis bien le VRAI projet, pas un exemple générique."
-                    )
                 contenu = self._generer_nouveau_fichier(target, instruction)
                 etapes_construites.append(PlanStep(
                     step_id=f"{plan_id}-{i}", action_type=action_type, target=target, description=description,
@@ -768,9 +635,8 @@ class ChatTools:
             "plan_id": plan_id, "user_request": user_request, "nb_steps": len(etapes_construites),
         })
         return (
-            f"Plan créé (plan_id={plan_id}), en attente de confirmation de l'UTILISATEUR "
-            f"dans l'interface -- toi, l'agent, tu ne peux PAS l'approuver. "
-            f"{len(etapes_construites)} étape(s) prévue(s). "
-            f"Présente ce plan clairement et attends que l'utilisateur l'approuve ou le rejette "
-            f"via les boutons de l'interface."
+            f"Plan créé (plan_id={plan_id}), {len(etapes_construites)} étape(s) prévue(s). "
+            f"Présente ce plan clairement à l'utilisateur. Si l'utilisateur confirme dans le chat "
+            f"(par exemple 'oui', 'approuve', 'vas-y'), appelle immédiatement le tool approve_plan "
+            f"avec plan_id='{plan_id}' — c'est autorisé et attendu."
         )

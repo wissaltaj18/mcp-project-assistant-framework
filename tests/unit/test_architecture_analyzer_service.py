@@ -24,7 +24,6 @@ def test_detecte_le_framework_via_les_vraies_dependances_json(tmp_path):
 
 
 def test_ignore_react_mentionne_hors_dependances(tmp_path):
-    """Preuve de la valeur de la lecture structurée : 'react' dans le nom du projet ne doit PAS déclencher une détection."""
     (tmp_path / "package.json").write_text(json.dumps({"name": "mon-projet-react-like", "dependencies": {"lodash": "^4.0.0"}}))
 
     rapport = ArchitectureAnalyzerService().analyze(str(tmp_path))
@@ -71,4 +70,5 @@ def test_to_markdown_fragment_gere_le_cas_sans_rien_detecte():
     fragment = rapport.to_markdown_fragment()
 
     assert "Aucun langage détecté" in fragment
-    assert "Aucun framework détecté" in fragment
+    # Sprint 19 : le libellé a changé
+    assert "Non détecté" in fragment

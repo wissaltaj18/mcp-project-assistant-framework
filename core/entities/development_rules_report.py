@@ -1,18 +1,18 @@
 """
-Résultat d'une analyse FACTUELLE (aucun LLM) des règles de développement
-d'un Workspace -- framework de tests, linter, CI, convention de nommage
-observée, branche Git par défaut, présence/couverture du .gitignore.
-Entité séparée d'ArchitectureAnalysisReport (Option B validée) : ce sont
-des règles de dev, pas de l'architecture.
+Résultat d'une analyse FACTUELLE des règles de développement (aucun LLM).
+
+Sprint 23 : nouveau champ ci_steps (étapes CI détectées dans les workflows),
+enrichissement de to_markdown_fragment() avec les étapes CI réelles
+dans FACTS, CONSTRAINTS et PREFERENCES.
 """
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 
 @dataclass
 class DevelopmentRulesReport:
-    """Faits de règles de développement détectés -- déterministes, aucune interprétation."""
+    """Faits de règles de développement détectés -- déterministes."""
 
     test_framework: Optional[str] = None
     linter: Optional[str] = None
@@ -21,36 +21,156 @@ class DevelopmentRulesReport:
     default_branch: Optional[str] = None
     gitignore_exists: bool = False
     gitignore_covers_env: bool = False
+    ci_steps: List[str] = field(default_factory=list)
 
     def to_markdown_fragment(self) -> str:
-        lignes = ["# Règles de développement (détection automatique)", ""]
+        lignes = ["# Règles de développement — Knowledge Base", ""]
 
-        lignes.append("## Framework de tests")
-        lignes.append(f"- {self.test_framework}" if self.test_framework else "Information non disponible.")
-
+        lignes.append("## FACTS — Éléments détectés automatiquement")
         lignes.append("")
-        lignes.append("## Linter / outil de qualité de code")
-        lignes.append(f"- {self.linter}" if self.linter else "Information non disponible.")
+        lignes.append(f"- **Framework de tests** : {self.test_framework or 'Non détecté'}")
+        lignes.append(f"- **Linter** : {self.linter or 'Non détecté'}")
+        lignes.append(f"- **CI** : {self.ci_system or 'Non détectée'}")
+        if self.ci_steps:
+            lignes.append(f"- **Étapes CI configurées** : {', '.join(self.ci_steps)}")
+        lignes.append(f"- **Convention de nommage** : {self.naming_convention or 'Non détectée'}")
+        lignes.append(f"- **Branche par défaut** : {self.default_branch or 'Non détectée'}")
+        lignes.append(f"- **.gitignore présent** : {'Oui' if self.gitignore_exists else 'Non'}")
+        if self.gitignore_exists:
+            lignes.append(
+                f"- **.gitignore couvre .env** : "
+                f"{'Oui' if self.gitignore_covers_env else 'Non — risque de fuite de secrets'}"
+            )
 
-        lignes.append("")
-        lignes.append("## Intégration continue (CI)")
-        lignes.append(f"- {self.ci_system}" if self.ci_system else "Information non disponible.")
+        constraints = self._construire_constraints()
+        if constraints:
+            lignes.append("")
+            lignes.append("---")
+            lignes.append("")
+            lignes.append("## CONSTRAINTS — Règles non négociables")
+            lignes.extend(f"- {c}" for c in constraints)
 
-        lignes.append("")
-        lignes.append("## Convention de nommage observée")
-        lignes.append(f"- {self.naming_convention}" if self.naming_convention else "Information non disponible.")
+        preferences = self._construire_preferences()
+        if preferences:
+            lignes.append("")
+            lignes.append("---")
+            lignes.append("")
+            lignes.append("## PREFERENCES — Conventions recommandées")
+            lignes.extend(f"- {p}" for p in preferences)
 
-        lignes.append("")
-        lignes.append("## Branche Git par défaut")
-        lignes.append(f"- {self.default_branch}" if self.default_branch else "Information non disponible.")
+        risques = self._construire_risques()
+        if risques:
+            lignes.append("")
+            lignes.append("---")
+            lignes.append("")
+            lignes.append("## RISQUES — Points d'attention détectés")
+            lignes.extend(f"- {r}" for r in risques)
 
-        lignes.append("")
-        lignes.append("## Fichier .gitignore")
-        if not self.gitignore_exists:
-            lignes.append("Absent.")
-        elif self.gitignore_covers_env:
-            lignes.append("Présent, couvre les fichiers .env.")
-        else:
-            lignes.append("Présent, mais ne couvre pas explicitement .env -- à vérifier.")
+        open_questions = self._construire_open_questions()
+        if open_questions:
+            lignes.append("")
+            lignes.append("---")
+            lignes.append("")
+            lignes.append("## OPEN QUESTIONS — Décisions non encore prises")
+            lignes.extend(f"- {q}" for q in open_questions)
 
         return "\n".join(lignes)
+
+    def _construire_constraints(self) -> List[str]:
+        constraints = []
+        if self.test_framework:
+            tests_dans_ci = any(
+                self.test_framework.lower() in step.lower()
+                for step in self.ci_steps
+            )
+            if tests_dans_ci:
+                constraints.append(
+                    f"Tout nouveau code DOIT avoir des tests {self.test_framework} -- "
+                    f"vérifiés automatiquement par la CI ({self.ci_system}). "
+                    f"Aucune PR ne peut merger si les tests échouent."
+                )
+            else:
+                constraints.append(
+                    f"Tout nouveau code doit être couvert par des tests {self.test_framework}. "
+                    "Aucune pull request sans tests associés."
+                )
+        if self.linter:
+            linter_dans_ci = any(
+                self.linter.lower().replace("-", "") in step.lower().replace("-", "")
+                for step in self.ci_steps
+            )
+            if linter_dans_ci:
+                constraints.append(
+                    f"{self.linter} est vérifié automatiquement par la CI -- "
+                    "le code doit passer sans erreur avant tout commit."
+                )
+            else:
+                constraints.append(
+                    f"{self.linter} est configuré -- respecter ses règles avant tout commit."
+                )
+        if self.naming_convention:
+            convention = self.naming_convention.split(" ")[0]
+            constraints.append(
+                f"Convention de nommage OBLIGATOIRE : {convention} "
+                f"(détectée : {self.naming_convention})."
+            )
+        if self.default_branch:
+            constraints.append(
+                f"La branche cible pour les Pull Requests est `{self.default_branch}`. "
+                "Ne jamais pousser directement sur cette branche."
+            )
+        return constraints
+
+    def _construire_preferences(self) -> List[str]:
+        preferences = []
+        if self.ci_system and self.ci_steps:
+            preferences.append(
+                f"La CI ({self.ci_system}) exécute automatiquement : "
+                f"{', '.join(self.ci_steps)}. "
+                "Vérifier que ces étapes passent localement avant tout push."
+            )
+        elif self.ci_system:
+            preferences.append(
+                f"La CI ({self.ci_system}) doit passer au vert avant tout merge."
+            )
+        if self.gitignore_exists and self.gitignore_covers_env:
+            preferences.append(
+                "Les fichiers .env sont correctement ignorés par Git. "
+                "Ne jamais committer de secrets, tokens ou mots de passe."
+            )
+        return preferences
+
+    def _construire_risques(self) -> List[str]:
+        risques = []
+        if not self.gitignore_exists:
+            risques.append("CRITIQUE : Aucun .gitignore détecté — risque de commit accidentel.")
+        elif not self.gitignore_covers_env:
+            risques.append("HAUTE : Le .gitignore ne couvre pas .env — risque de fuite de secrets.")
+        if not self.test_framework:
+            risques.append("HAUTE : Aucun framework de tests détecté — risque de régression élevé.")
+        if not self.ci_system:
+            risques.append("MOYENNE : Aucune CI détectée — vérifications qualité non automatisées.")
+        return risques
+
+    def _construire_open_questions(self) -> List[str]:
+        questions = []
+        if not self.test_framework:
+            questions.append(
+                "Quel framework de tests adopter ? "
+                "(Recommandation : PHPUnit pour PHP/Symfony, pytest pour Python)"
+            )
+        if not self.linter:
+            questions.append(
+                "Quel linter configurer ? "
+                "(Recommandation : PHP-CS-Fixer pour PHP, ESLint pour JS/TS)"
+            )
+        if not self.ci_system:
+            questions.append(
+                "Quelle CI mettre en place ? "
+                "(Recommandation : GitHub Actions si le dépôt est sur GitHub)"
+            )
+        if not self.default_branch:
+            questions.append(
+                "Quelle est la branche principale ? (Convention : `main` ou `master`)"
+            )
+        return questions

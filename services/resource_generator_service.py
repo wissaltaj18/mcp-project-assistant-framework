@@ -12,6 +12,10 @@ from services.architecture_analyzer_service import ArchitectureAnalyzerService
 from services.development_rules_analyzer_service import DevelopmentRulesAnalyzerService
 from services.functional_overview_analyzer_service import FunctionalOverviewAnalyzerService
 
+from services.review_checklist_generator_service import ReviewChecklistGeneratorService
+from services.security_rules_generator_service import SecurityRulesGeneratorService
+from services.template_resource_service import TemplateResourceService
+
 NOM_FICHIER_TECHNICAL = "technical_architecture.md"
 NOM_FICHIER_FUNCTIONAL = "functional_overview.md"
 NOM_FICHIER_DEVELOPMENT_RULES = "development_rules.md"
@@ -31,13 +35,46 @@ class ResourceGeneratorService:
         self._writer = resource_writer
         self._functional_analyzer = functional_overview_analyzer or FunctionalOverviewAnalyzerService(architecture_analyzer)
         self._development_rules_analyzer = development_rules_analyzer or DevelopmentRulesAnalyzerService(architecture_analyzer)
+        self._review_checklist_generator = ReviewChecklistGeneratorService()
+        self._security_rules_generator = SecurityRulesGeneratorService()
+        self._template_resource_service = TemplateResourceService()
 
     def generate_all(self, repo_path: str, resources_dir: str) -> Dict[str, str]:
-        """Point d'entrée unique : génère les 3 Resources complètes."""
+        """Point d'entrée unique : génère les 5 Resources automatiques
+        et crée les 2 templates manuels si absents."""
+
+        # ── 1. Analyse commune (évite de rejouer l'analyse 3 fois) ──────────
+        rapport_arch = self._analyzer.analyze(repo_path)
+        rapport_dev = self._development_rules_analyzer.analyze(repo_path)
+
+        # ── 2. Resources automatiques ────────────────────────────────────────
+        contenu_tech = rapport_arch.to_markdown_fragment()
+        self._writer.write(resources_dir, NOM_FICHIER_TECHNICAL, contenu_tech)
+
+        rapport_func = self._functional_analyzer.analyze(repo_path)
+        contenu_func = rapport_func.to_markdown_fragment()
+        self._writer.write(resources_dir, NOM_FICHIER_FUNCTIONAL, contenu_func)
+
+        contenu_dev = rapport_dev.to_markdown_fragment()
+        self._writer.write(resources_dir, NOM_FICHIER_DEVELOPMENT_RULES, contenu_dev)
+
+        rapport_checklist = self._review_checklist_generator.generate(rapport_dev, rapport_arch)
+        contenu_checklist = rapport_checklist.to_markdown_fragment()
+        self._writer.write(resources_dir, "review_checklist.md", contenu_checklist)
+
+        rapport_secu = self._security_rules_generator.generate(rapport_arch)
+        contenu_secu = rapport_secu.to_markdown_fragment()
+        self._writer.write(resources_dir, "security_rules.md", contenu_secu)
+
+        # ── 3. Templates manuels (créés une seule fois, jamais écrasés) ──────
+        self._template_resource_service.create_if_absent(resources_dir)
+
         return {
-            NOM_FICHIER_TECHNICAL: self.generate_technical_architecture(repo_path, resources_dir),
-            NOM_FICHIER_FUNCTIONAL: self.generate_functional_overview(repo_path, resources_dir),
-            NOM_FICHIER_DEVELOPMENT_RULES: self.generate_development_rules(repo_path, resources_dir),
+            NOM_FICHIER_TECHNICAL: contenu_tech,
+            NOM_FICHIER_FUNCTIONAL: contenu_func,
+            NOM_FICHIER_DEVELOPMENT_RULES: contenu_dev,
+            "review_checklist.md": contenu_checklist,
+            "security_rules.md": contenu_secu,
         }
 
     def generate_technical_architecture(self, repo_path: str, resources_dir: str) -> str:

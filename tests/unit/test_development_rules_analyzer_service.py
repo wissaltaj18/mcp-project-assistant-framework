@@ -68,7 +68,7 @@ def test_gitignore_absent(tmp_path):
 
     assert rapport.gitignore_exists is False
     fragment = rapport.to_markdown_fragment()
-    assert "Absent" in fragment
+    assert "Non" in fragment  # Sprint 23 : ".gitignore présent : Non"
 
 
 def test_gitignore_present_couvre_env(tmp_path):
@@ -94,4 +94,4 @@ def test_honnete_quand_rien_nest_detecte(tmp_path):
 
     assert rapport.test_framework is None
     fragment = rapport.to_markdown_fragment()
-    assert "Information non disponible" in fragment
+    assert "Non détecté" in fragment  # Sprint 23 : nouveau libellé

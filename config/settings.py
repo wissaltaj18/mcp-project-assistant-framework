@@ -17,5 +17,5 @@ class FrameworkSettings:
     def from_env(cls) -> "FrameworkSettings":
         return cls(
             generated_projects_dir=os.getenv("GENERATED_PROJECTS_DIR", "generated_projects"),
-            active_llm_provider=os.getenv("ACTIVE_LLM_PROVIDER", "ollama_qwen"),
+            active_llm_provider=os.getenv("ACTIVE_LLM_PROVIDER", "gemini"),
         )

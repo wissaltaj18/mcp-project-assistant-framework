@@ -73,7 +73,8 @@ def test_honnete_quand_rien_nest_detecte(tmp_path):
     assert rapport.main_dependencies == []
     assert rapport.config_files == []
     fragment = rapport.to_markdown_fragment()
-    assert "Information non disponible" in fragment
+    # Sprint 19 : le libellé a changé
+    assert "Non détecté" in fragment
 
 
 def test_scenario_symfony_complet_toutes_les_nouvelles_sections(tmp_path):

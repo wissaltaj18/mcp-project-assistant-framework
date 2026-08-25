@@ -1,0 +1,493 @@
+{
+  "version": "1.0",
+  "description": "Regles de Knowledge Base par langage, framework et pattern architectural. Editer ce fichier pour ajouter un nouveau framework sans modifier le code Python.",
+
+  "languages": {
+    "PHP": {
+      "best_practices": [
+        "Utiliser Composer pour toutes les dependances -- ne jamais inclure des fichiers manuellement.",
+        "Respecter PSR-12 pour le style de code.",
+        "Typer tous les parametres et valeurs de retour des fonctions (PHP 8+)."
+      ],
+      "anti_patterns": [
+        "Ne pas utiliser les fonctions MySQL deprecated -- utiliser PDO ou un ORM.",
+        "Ne pas melanger HTML et logique PHP dans les memes fichiers.",
+        "Ne pas ignorer les erreurs avec @ -- les gerer explicitement."
+      ]
+    },
+    "Python": {
+      "best_practices": [
+        "Respecter PEP 8 pour le style de code.",
+        "Utiliser des type hints sur toutes les fonctions publiques (PEP 484).",
+        "Gerer les dependances via un fichier requirements.txt ou pyproject.toml."
+      ],
+      "anti_patterns": [
+        "Ne pas utiliser les imports wildcard (from module import *).",
+        "Ne pas catcher Exception de facon generique sans la retraiter.",
+        "Ne pas stocker de secrets dans le code source."
+      ]
+    },
+    "Java": {
+      "best_practices": [
+        "Privilegier l'injection de dependances plutot que l'instanciation directe.",
+        "Utiliser les interfaces pour definir les contrats entre composants.",
+        "Gerer les ressources avec try-with-resources."
+      ],
+      "anti_patterns": [
+        "Ne pas utiliser les champs statiques mutables comme etat global.",
+        "Ne pas retourner null -- preferer Optional<T>.",
+        "Ne pas ignorer les exceptions verifiees."
+      ]
+    },
+    "JavaScript": {
+      "best_practices": [
+        "Privilegier const et let -- ne jamais utiliser var.",
+        "Utiliser les Promises ou async/await pour le code asynchrone.",
+        "Gerer les erreurs dans les Promises avec .catch() ou try/catch."
+      ],
+      "anti_patterns": [
+        "Ne pas modifier les prototypes des objets natifs.",
+        "Ne pas utiliser eval() -- risque de securite.",
+        "Ne pas ignorer les rejets de Promise (unhandled rejection)."
+      ]
+    },
+    "TypeScript": {
+      "best_practices": [
+        "Activer strict: true dans tsconfig.json.",
+        "Typer explicitement les retours de fonctions publiques.",
+        "Privilegier les interfaces sur les types pour les contrats publics."
+      ],
+      "anti_patterns": [
+        "Ne pas utiliser any -- definir un type explicite.",
+        "Ne pas supprimer les erreurs TypeScript avec @ts-ignore sans justification.",
+        "Ne pas caster avec as de facon abusive -- preferer les type guards."
+      ]
+    },
+    "C#": {
+      "best_practices": [
+        "Utiliser l'injection de dependances via IServiceCollection.",
+        "Privilegier les types nullable references (C# 8+).",
+        "Respecter les conventions de nommage Microsoft (PascalCase pour les membres publics)."
+      ],
+      "anti_patterns": [
+        "Ne pas utiliser les champs publics -- utiliser des proprietes avec accesseurs.",
+        "Ne pas attraper Exception de base sans la journaliser.",
+        "Ne pas bloquer sur async avec .Result ou .Wait() -- risque de deadlock."
+      ]
+    }
+  },
+
+  "frameworks": {
+    "Symfony (PHP)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Les Controllers recoivent les requetes HTTP et deleguent au Service -- ils ne contiennent JAMAIS de logique metier.",
+            "Un Controller doit rester lisible en moins de 50 lignes.",
+            "Utiliser les attributs PHP #[Route] pour definir les routes."
+          ],
+          "anti_patterns": [
+            "Ne pas acceder au Repository directement depuis un Controller.",
+            "Ne pas instancier les Services avec new -- utiliser l'injection de dependances."
+          ]
+        },
+        "service": {
+          "best_practices": [
+            "Toute logique metier doit etre implementee dans un Service, jamais dans un Controller ni dans une Entity.",
+            "Les Services sont injectes par le conteneur de dependances Symfony -- ne pas les instancier manuellement."
+          ],
+          "anti_patterns": [
+            "Ne pas dupliquer la logique metier entre plusieurs Services.",
+            "Ne pas acceder a Request directement dans un Service -- la passer en parametre."
+          ]
+        },
+        "entity": {
+          "best_practices": [
+            "Les Entities representent les donnees persistees -- elles ne contiennent pas de logique applicative.",
+            "Utiliser les attributs Doctrine (#[ORM\\Entity]) pour le mapping."
+          ],
+          "anti_patterns": [
+            "Ne pas appeler l'EntityManager directement dans une Entity.",
+            "Ne pas placer de logique metier complexe dans les Entities."
+          ]
+        },
+        "repository": {
+          "best_practices": [
+            "Les Repositories encapsulent tout acces a la base de donnees -- aucune requete SQL/DQL en dehors de cette couche.",
+            "Etendre ServiceEntityRepository pour beneficier des methodes communes."
+          ],
+          "anti_patterns": [
+            "Ne pas appeler le Repository depuis un Controller -- passer par le Service.",
+            "Ne pas construire des requetes DQL complexes inline -- utiliser QueryBuilder."
+          ]
+        }
+      }
+    },
+
+    "Laravel (PHP)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Thin Controllers : deleguer toute logique metier aux Services ou Form Requests.",
+            "Utiliser les Resource Controllers pour les operations CRUD standard."
+          ],
+          "anti_patterns": [
+            "Ne pas ecrire de requetes Eloquent complexes dans les Controllers.",
+            "Ne pas placer de logique metier dans les Controllers."
+          ]
+        },
+        "service": {
+          "best_practices": [
+            "Isoler la logique metier complexe dans des Service classes dediees.",
+            "Utiliser l'injection de dependances via le Service Container Laravel."
+          ],
+          "anti_patterns": [
+            "Ne pas utiliser les facades Laravel dans les tests -- preferer l'injection."
+          ]
+        },
+        "entity": {
+          "best_practices": [
+            "Utiliser les relations Eloquent pour exprimer les associations metier.",
+            "Definir les fillable ou guarded pour proteger contre le mass assignment."
+          ],
+          "anti_patterns": [
+            "Ne pas placer de logique applicative complexe dans les Models.",
+            "Ne pas oublier de proteger les models contre le mass assignment."
+          ]
+        }
+      }
+    },
+
+    "Django (Python)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Thin Views : les Views Django deleguent la logique aux Models ou aux Services.",
+            "Utiliser les class-based views pour les patterns CRUD standard."
+          ],
+          "anti_patterns": [
+            "Ne pas faire de requetes ORM directement dans les templates.",
+            "Ne pas bypasser le systeme d'authentification Django pour les vues protegees."
+          ]
+        },
+        "entity": {
+          "best_practices": [
+            "Definir les __str__ et Meta sur chaque Model pour la lisibilite.",
+            "Utiliser les migrations Django -- ne jamais modifier la base directement."
+          ],
+          "anti_patterns": [
+            "Ne pas ecrire de SQL brut sauf cas exceptionnel documente.",
+            "Ne pas oublier les index sur les champs souvent filtres."
+          ]
+        }
+      }
+    },
+
+    "Flask (Python)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Utiliser les Blueprints pour organiser les routes par domaine fonctionnel.",
+            "Les fonctions de vue restent courtes -- deleguer aux Services."
+          ],
+          "anti_patterns": [
+            "Ne pas stocker l'etat de l'application dans des variables globales.",
+            "Ne pas melanger les routes de plusieurs domaines dans un seul fichier."
+          ]
+        }
+      }
+    },
+
+    "FastAPI (Python)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Utiliser les Router pour organiser les endpoints par domaine fonctionnel.",
+            "Definir des schemas Pydantic pour toutes les entrees et sorties.",
+            "Privilegier les dependances FastAPI (Depends) pour l'injection."
+          ],
+          "anti_patterns": [
+            "Ne pas placer de logique metier dans les fonctions d'endpoint.",
+            "Ne pas ignorer la validation Pydantic -- ne pas caster manuellement."
+          ]
+        },
+        "service": {
+          "best_practices": [
+            "Isoler la logique metier dans des classes de service injectables via Depends.",
+            "Les operations I/O doivent etre async pour ne pas bloquer l'event loop."
+          ],
+          "anti_patterns": [
+            "Ne pas utiliser des fonctions synchrones pour les operations I/O dans un contexte async."
+          ]
+        }
+      }
+    },
+
+    "Spring Boot (Java)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Les @RestController deleguent obligatoirement aux @Service -- aucune logique metier dans la couche Controller.",
+            "Utiliser les DTO pour les entrees/sorties -- ne pas exposer les @Entity directement."
+          ],
+          "anti_patterns": [
+            "Ne pas injecter des @Repository directement dans des @RestController.",
+            "Ne pas placer de logique metier dans les @RestController."
+          ]
+        },
+        "service": {
+          "best_practices": [
+            "Les @Service contiennent la logique metier et orchestrent les @Repository.",
+            "La gestion des transactions (@Transactional) appartient a la couche Service."
+          ],
+          "anti_patterns": [
+            "Ne pas creer de logique metier dans les @Entity.",
+            "Eviter les requetes N+1 -- utiliser les jointures JPA ou @EntityGraph."
+          ]
+        },
+        "entity": {
+          "best_practices": [
+            "Les @Entity sont des POJOs -- pas de logique applicative.",
+            "Utiliser Lombok (@Data, @Builder) pour reduire le boilerplate."
+          ],
+          "anti_patterns": [
+            "Ne pas utiliser @Entity pour des objets non persistes -- preferer des DTO."
+          ]
+        },
+        "repository": {
+          "best_practices": [
+            "Utiliser Spring Data JPA -- pas de requetes SQL natives sauf cas exceptionnel justifie.",
+            "Definir les methodes de requete par convention de nommage Spring Data."
+          ],
+          "anti_patterns": [
+            "Ne pas placer de logique metier dans les @Repository."
+          ]
+        }
+      }
+    },
+
+    "React (JavaScript/TypeScript)": {
+      "layers": {
+        "service": {
+          "best_practices": [
+            "Isoler les appels API dans des fichiers de service dedies, jamais directement dans les composants.",
+            "L'etat partage entre composants est gere via Context ou un store -- pas de prop drilling au-dela de 2 niveaux."
+          ],
+          "anti_patterns": [
+            "Ne pas mutater l'etat directement -- toujours utiliser setState ou les setters de hooks.",
+            "Ne pas effectuer de side effects dans le corps du composant -- utiliser useEffect."
+          ]
+        }
+      }
+    },
+
+    "Express (JavaScript/TypeScript)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Organiser les routes par domaine fonctionnel dans des Router Express dedies.",
+            "Utiliser des middlewares pour la validation, l'authentification et la journalisation."
+          ],
+          "anti_patterns": [
+            "Ne pas placer de logique metier dans les fonctions de route.",
+            "Ne pas oublier la gestion d'erreurs avec le middleware d'erreur Express (4 parametres)."
+          ]
+        },
+        "service": {
+          "best_practices": [
+            "Isoler la logique metier dans des classes de service injectees dans les controllers."
+          ],
+          "anti_patterns": [
+            "Ne pas appeler directement la base de donnees depuis un controller."
+          ]
+        }
+      }
+    },
+
+    "ASP.NET Core (C#)": {
+      "layers": {
+        "controller": {
+          "best_practices": [
+            "Les Controllers deleguent aux Services ou Handlers -- ils ne contiennent pas de logique metier.",
+            "Utiliser les attributs de validation ([Required], [Range]...) sur les modeles d'entree.",
+            "Retourner des IActionResult ou ActionResult<T> pour une meilleure expressivite."
+          ],
+          "anti_patterns": [
+            "Ne pas acceder directement au DbContext depuis un Controller.",
+            "Ne pas placer de logique metier dans les Controllers."
+          ]
+        },
+        "service": {
+          "best_practices": [
+            "Enregistrer les services via IServiceCollection avec la bonne duree de vie (Singleton, Scoped, Transient).",
+            "Definir des interfaces pour chaque service -- facilite les tests et le remplacement."
+          ],
+          "anti_patterns": [
+            "Ne pas utiliser un service Scoped depuis un service Singleton -- risque de Captive Dependency."
+          ]
+        },
+        "entity": {
+          "best_practices": [
+            "Configurer le mapping EF Core via les Fluent API dans OnModelCreating ou des IEntityTypeConfiguration.",
+            "Utiliser les migrations EF Core -- ne jamais modifier la base directement."
+          ],
+          "anti_patterns": [
+            "Ne pas exposer les entites EF Core directement dans les reponses API -- utiliser des DTOs."
+          ]
+        },
+        "repository": {
+          "best_practices": [
+            "Implementer le Repository Pattern via une interface -- permet le remplacement et les tests.",
+            "Utiliser le Unit of Work Pattern pour gerer les transactions multi-repository."
+          ],
+          "anti_patterns": [
+            "Ne pas dupliquer la logique de requete entre plusieurs Repositories."
+          ]
+        }
+      }
+    }
+  },
+
+  "patterns": {
+    "mvc": {
+      "description": "Model-View-Controller : separation des responsabilites en 3 couches",
+      "best_practices": [
+        "Maintenir une separation stricte : Model (donnees), View (presentation), Controller (orchestration).",
+        "Le Controller ne doit pas contenir de logique de presentation.",
+        "Le Model ne doit pas dependre du Controller ou de la View."
+      ],
+      "anti_patterns": [
+        "Ne pas placer de logique metier dans les Controllers -- c'est le piege classique du Fat Controller.",
+        "Ne pas faire de requetes base de donnees dans les Views."
+      ]
+    },
+    "repository": {
+      "description": "Repository Pattern : abstraction de l'acces aux donnees",
+      "best_practices": [
+        "Definir une interface pour chaque Repository -- le code appelant ne depend pas de l'implementation.",
+        "Le Repository encapsule toute la logique de requete -- aucune requete SQL en dehors.",
+        "Nommer les methodes de facon semantique (findByEmail, findActiveOrders) plutot que technique (select, query)."
+      ],
+      "anti_patterns": [
+        "Ne pas appeler le Repository directement depuis la couche presentation.",
+        "Ne pas laisser fuiter les objets ORM au-dela de la couche Repository."
+      ]
+    },
+    "cqrs": {
+      "description": "Command Query Responsibility Segregation : separation des operations de lecture et d'ecriture",
+      "best_practices": [
+        "Les Commands modifient l'etat -- elles ne retournent pas de donnees (sauf l'ID cree).",
+        "Les Queries lisent l'etat -- elles ne le modifient jamais.",
+        "Chaque Command et Query a son propre Handler."
+      ],
+      "anti_patterns": [
+        "Ne pas melanger operations de lecture et d'ecriture dans le meme Handler.",
+        "Ne pas creer de Command qui retourne un objet metier complet -- retourner uniquement l'identifiant."
+      ]
+    },
+    "clean_architecture": {
+      "description": "Clean Architecture : couches concentriques avec la dependance orientee vers le domaine",
+      "best_practices": [
+        "Les dependances pointent toujours vers l'interieur -- le domaine ne depend de rien.",
+        "Utiliser des interfaces (ports) pour isoler le domaine de l'infrastructure.",
+        "Les Use Cases orchestrent le domaine sans connaitre les details techniques."
+      ],
+      "anti_patterns": [
+        "Ne pas importer des frameworks ou bibliotheques d'infrastructure dans la couche domaine.",
+        "Ne pas bypasser les Use Cases pour acceder directement au domaine depuis la presentation."
+      ]
+    },
+    "hexagonal": {
+      "description": "Architecture Hexagonale (Ports & Adapters) : le domaine est isole par des ports",
+      "best_practices": [
+        "Definir des ports (interfaces) pour chaque interaction avec l'exterieur (base de donnees, API, queue).",
+        "Les Adapters implementent les ports -- ils sont remplacables sans toucher au domaine.",
+        "Tester le domaine sans infrastructure en injectant des Adapters de test."
+      ],
+      "anti_patterns": [
+        "Ne pas laisser le domaine dependre directement d'une implementation d'infrastructure.",
+        "Ne pas confondre les ports primaires (pilotes) et secondaires (pilotes par le domaine)."
+      ]
+    },
+    "ddd": {
+      "description": "Domain-Driven Design : le code reflete le modele metier",
+      "best_practices": [
+        "Utiliser le langage ubiquitaire -- les noms du code correspondent aux termes metier.",
+        "Les Aggregates sont la frontiere de consistance -- une seule transaction par Aggregate.",
+        "Les Value Objects sont immuables et definis par leurs valeurs, pas par leur identite."
+      ],
+      "anti_patterns": [
+        "Ne pas creer des Aggregates trop grands -- cela cree des problemes de performance et de concurrence.",
+        "Ne pas appeler un Repository depuis l'interieur d'un Aggregate.",
+        "Ne pas utiliser des IDs techniques (UUID) directement dans la logique metier -- creer des Value Objects."
+      ]
+    }
+  }
+  ,
+  "security_rules": {
+    "global": [
+      "Ne jamais stocker de secrets (tokens, mots de passe, cles API) dans le code source ou les commits Git.",
+      "Valider et assainir toutes les entrees utilisateur cote serveur -- ne jamais faire confiance au client.",
+      "Utiliser HTTPS pour toutes les communications -- ne jamais transmettre de donnees sensibles en clair.",
+      "Journaliser les acces et les erreurs de securite -- ne jamais journaliser les donnees sensibles elles-memes.",
+      "Appliquer le principe du moindre privilege : chaque composant ne dispose que des permissions strictement necessaires."
+    ],
+    "Symfony (PHP)": [
+      "Activer la protection CSRF sur tous les formulaires (CSRFTokenManager configure par defaut dans Symfony).",
+      "Utiliser les requetes preparees Doctrine -- ne jamais concatener des valeurs utilisateur dans du DQL/SQL.",
+      "Configurer security.yaml avec des firewalls et access_control adaptes aux roles.",
+      "Ne jamais exposer les messages d exception detailles en production (APP_DEBUG=false en prod).",
+      "Valider les entrees avec les contraintes Symfony Validator avant tout traitement.",
+      "Utiliser symfony/rate-limiter pour proteger les endpoints sensibles (login, API)."
+    ],
+    "Laravel (PHP)": [
+      "Utiliser les requetes preparees Eloquent -- eviter DB::raw() sauf cas justifie.",
+      "Activer la protection CSRF via le middleware VerifyCsrfToken sur toutes les routes web.",
+      "Utiliser les Policies et Gates pour l'autorisation -- ne pas placer la logique d'acces dans les Controllers.",
+      "Configurer APP_DEBUG=false en production.",
+      "Utiliser Laravel Sanctum ou Passport pour l'authentification API."
+    ],
+    "Django (Python)": [
+      "Ne jamais desactiver la protection CSRF (django.middleware.csrf.CsrfViewMiddleware).",
+      "Utiliser l'ORM Django -- eviter les requetes SQL brutes sauf via parametres lies.",
+      "Configurer DEBUG=False en production et definir ALLOWED_HOSTS explicitement.",
+      "Utiliser django.contrib.auth pour l'authentification -- ne pas reimplementer.",
+      "Activer SECURE_SSL_REDIRECT, SECURE_HSTS_SECONDS et SESSION_COOKIE_SECURE en production."
+    ],
+    "Flask (Python)": [
+      "Utiliser Flask-WTF pour la protection CSRF sur les formulaires.",
+      "Ne jamais utiliser debug=True en production.",
+      "Configurer une SECRET_KEY forte et la charger depuis les variables d'environnement.",
+      "Utiliser Flask-Login ou Flask-JWT-Extended pour la gestion des sessions.",
+      "Valider toutes les entrees avec WTForms ou Marshmallow."
+    ],
+    "FastAPI (Python)": [
+      "Utiliser les schemas Pydantic pour valider toutes les entrees -- ne pas bypasser la validation.",
+      "Implementer l'authentification via OAuth2PasswordBearer ou HTTPBearer.",
+      "Ne jamais exposer les traces d'erreur completes en production (configure via exception_handlers).",
+      "Configurer CORS explicitement avec les origines autorisees -- ne pas utiliser allow_origins=[\"*\"] en production.",
+      "Utiliser des dependances FastAPI (Depends) pour centraliser la logique d'authentification."
+    ],
+    "Spring Boot (Java)": [
+      "Configurer Spring Security avec des regles d'autorisation explicites -- ne pas laisser les endpoints ouverts par defaut.",
+      "Utiliser les requetes JPA preparees -- ne jamais concatener des entrees utilisateur dans du JPQL/SQL natif.",
+      "Activer la protection CSRF si l'application sert des formulaires HTML.",
+      "Ne jamais logger les mots de passe, tokens ou donnees sensibles.",
+      "Configurer des headers de securite HTTP (X-Frame-Options, X-XSS-Protection) via Spring Security."
+    ],
+    "Express (JavaScript/TypeScript)": [
+      "Utiliser helmet pour configurer les headers de securite HTTP.",
+      "Utiliser express-rate-limit pour proteger les endpoints publics.",
+      "Valider les entrees avec joi, zod ou express-validator.",
+      "Ne jamais faire confiance a req.body sans validation -- activer la limite de taille des payloads.",
+      "Utiliser des requetes preparees avec votre ORM -- ne jamais concatener des entrees dans des requetes SQL."
+    ],
+    "ASP.NET Core (C#)": [
+      "Utiliser ASP.NET Core Identity ou OpenIddict pour l'authentification -- ne pas reimplementer.",
+      "Activer la protection CSRF via AntiForgeryToken sur les formulaires.",
+      "Utiliser les Data Annotations ou FluentValidation pour valider les modeles d'entree.",
+      "Configurer HTTPS redirection et HSTS dans Startup/Program.",
+      "Utiliser les requetes EF Core parametrisees -- eviter les requetes SQL brutes sans parametres."
+    ]
+  }
+}

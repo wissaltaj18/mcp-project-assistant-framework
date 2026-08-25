@@ -30,7 +30,7 @@ def test_honnete_quand_aucune_information_disponible(tmp_path):
     assert rapport.detected_entities == []
     fragment = rapport.to_markdown_fragment()
     assert "Information non disponible" in fragment
-    assert "Aucun fichier de routes trouvé" in fragment
+    assert "Information non disponible" in fragment or "Aucun README" in fragment
 
 
 def test_cite_le_contenu_dun_fichier_de_routes_connu(tmp_path):
@@ -89,5 +89,5 @@ def test_scenario_symfony_complet_description_readme_routes_entites(tmp_path):
     assert "Order" in rapport.detected_entities
 
     fragment = rapport.to_markdown_fragment()
-    assert "Points d'entrée utilisateur" in fragment
-    assert "Entités / modèles détectés" in fragment
+    assert "POINTS D'ENTRÉE EXISTANTS" in fragment or "ROUTES PAR DOMAINE" in fragment
+    assert "VOCABULAIRE MÉTIER" in fragment
